@@ -523,6 +523,7 @@ export function App() {
               mode={mode}
               onSelectCuratedSite={handleSelectCuratedFromMap}
               onSelectCustomCoordinate={handleAddCustomCoordinate}
+              onOpenLocalTerrain3D={() => setVisualSubview("terrain3d")}
             />
           )}
 
@@ -531,7 +532,12 @@ export function App() {
           )}
 
           {visualSubview === "terrain3d" && (
-            <Terrain3D patch={focusedTerrain} currentSample={focusedSample} mode={mode} />
+            <Terrain3D
+              patch={focusedTerrain}
+              currentSample={focusedSample}
+              mode={mode}
+              onBackToGlobe={() => setVisualSubview("globe3d")}
+            />
           )}
 
           {visualSubview === "polar2d" && (

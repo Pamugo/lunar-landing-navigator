@@ -7,12 +7,50 @@ export interface Terrain3DProps {
   patch: TerrainPatch | null;
   currentSample: VisibilitySample | null;
   mode: AppMode;
+  onBackToGlobe?: () => void;
 }
 
-export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
+/**
+ * Interpola bilinealmente la matriz de elevaciones (n x n) a una malla de alta densidad (targetSize x targetSize, p.ej. 128x128)
+ * y anade micro-relieve determinista a escala metrica para evitar facetas planas al acercar la camara.
+ */
+function sampleElevationBilinear(
+  grid: number[][],
+  n: number,
+  u: number,
+  v: number,
+  fallbackElev: number,
+): number {
+  const fx = Math.max(0, Math.min(n - 1.0001, u * (n - 1)));
+  const fy = Math.max(0, Math.min(n - 1.0001, v * (n - 1)));
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const x1 = Math.min(n - 1, x0 + 1);
+  const y1 = Math.min(n - 1, y0 + 1);
+  const tx = fx - x0;
+  const ty = fy - y0;
+
+  const z00 = grid[y0]?.[x0] ?? fallbackElev;
+  const z10 = grid[y0]?.[x1] ?? fallbackElev;
+  const z01 = grid[y1]?.[x0] ?? fallbackElev;
+  const z11 = grid[y1]?.[x1] ?? fallbackElev;
+
+  const top = z00 * (1 - tx) + z10 * tx;
+  const bot = z01 * (1 - tx) + z11 * tx;
+  return top * (1 - ty) + bot * ty;
+}
+
+export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain3DProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sunLightRef = useRef<THREE.DirectionalLight | null>(null);
   const [terrainShaderMode, setTerrainShaderMode] = useState<"regolith" | "hypsometric">("regolith");
+  const targetCamRef = useRef({ yaw: 0.45, pitch: 0.48, dist: 17.5 });
+  const camStateRef = useRef({ yaw: 0.45, pitch: 0.48, dist: 17.5 });
+
+  const handleZoomStep = (dir: "in" | "out") => {
+    const step = dir === "in" ? -3.0 : 3.5;
+    targetCamRef.current.dist = Math.max(4.2, Math.min(42.0, targetCamRef.current.dist + step));
+  };
 
   useEffect(() => {
     const container = mountRef.current;
@@ -22,19 +60,17 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
     const height = container.clientHeight || 380;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 200);
-    camera.position.set(0, 14, 18);
-    camera.lookAt(0, 0, 0);
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.05, 250);
 
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     } catch {
       return;
     }
 
     const isMobile = window.innerWidth < 768;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2.0));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.0));
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -42,59 +78,71 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
     container.appendChild(renderer.domElement);
 
     // Iluminacion de entorno espacial (faint earthshine)
-    const ambient = new THREE.AmbientLight(0x1e293b, 0.35);
+    const ambient = new THREE.AmbientLight(0x1e293b, 0.32);
     scene.add(ambient);
 
-    // Luz solar directa con proyeccion de sombras reales
-    const sunLight = new THREE.DirectionalLight(0xfffaea, 3.0);
-    sunLight.position.set(12, 6, 12);
+    // Luz solar directa con proyeccion de sombras reales de alta resolucion
+    const sunLight = new THREE.DirectionalLight(0xfffaea, 3.15);
+    sunLight.position.set(14, 7, 14);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = isMobile ? 1024 : 2048;
     sunLight.shadow.mapSize.height = isMobile ? 1024 : 2048;
     sunLight.shadow.camera.near = 1.0;
-    sunLight.shadow.camera.far = 80.0;
-    const d = 14;
+    sunLight.shadow.camera.far = 90.0;
+    const d = 15;
     sunLight.shadow.camera.left = -d;
     sunLight.shadow.camera.right = d;
     sunLight.shadow.camera.top = d;
     sunLight.shadow.camera.bottom = -d;
-    sunLight.shadow.bias = -0.0006;
+    sunLight.shadow.bias = -0.0005;
     scene.add(sunLight);
     sunLightRef.current = sunLight;
 
-    // Construir malla de terreno fotorrealista a partir de patch.elevations_m (grid_size x grid_size)
-    const n = patch.grid_size;
+    // Construir malla de terreno de alta densidad 128x128 interpolada desde patch.elevations_m
+    const rawN = patch.grid_size;
+    const highResN = isMobile ? 96 : 128;
     const spanUnits = 18.0;
-    const geo = new THREE.PlaneGeometry(spanUnits, spanUnits, n - 1, n - 1);
+    const geo = new THREE.PlaneGeometry(spanUnits, spanUnits, highResN - 1, highResN - 1);
     geo.rotateX(-Math.PI / 2);
 
     const posAttr = geo.attributes.position;
     const colors: number[] = [];
     const minEl = patch.min_elevation_m;
     const maxEl = Math.max(minEl + 100.0, patch.max_elevation_m);
-    const scaleY = 2.8 / Math.max(800.0, maxEl - minEl);
+    const scaleY = 3.0 / Math.max(750.0, maxEl - minEl);
 
     if (posAttr) {
       for (let i = 0; i < posAttr.count; i++) {
-        const row = Math.floor(i / n);
-        const col = i % n;
-        const elev = patch.elevations_m[row]?.[col] ?? patch.site_elevation_m;
+        const row = Math.floor(i / highResN);
+        const col = i % highResN;
+        const u = col / (highResN - 1);
+        const v = row / (highResN - 1);
+
+        const baseElev = sampleElevationBilinear(
+          patch.elevations_m,
+          rawN,
+          u,
+          v,
+          patch.site_elevation_m,
+        );
+        // Micro-ondulacion determinista de sub-celda para nitidez en acercamiento
+        const microRippleM =
+          Math.sin(u * 42.0 + v * 31.0) * Math.cos(u * 27.0 - v * 39.0) * 3.5;
+        const elev = baseElev + microRippleM;
+
         const y = (elev - patch.site_elevation_m) * scaleY;
         posAttr.setY(i, y);
 
         const t = Math.max(0, Math.min(1, (elev - minEl) / (maxEl - minEl)));
 
         if (terrainShaderMode === "hypsometric") {
-          // Capa Cientifica (Altimetria LOLA): azul pizarra oscuro (crateres PSR) -> cian -> ambar/blanco (crestas)
           const r = 0.12 + 0.65 * t;
           const g = 0.20 + 0.60 * t;
           const b = 0.38 + 0.45 * (1.0 - t * 0.4);
           colors.push(r, g, b);
         } else {
-          // Vista Fotografica Real (Regolito Lunar Basaltico Mate)
-          // Albedo real ~0.12-0.16 con micro-textura de regolito y variacion por pendiente
-          const pseudoNoise = (((row * 43 + col * 29) % 23) / 23.0 - 0.5) * 0.05;
-          const baseGrey = 0.40 + 0.14 * t + pseudoNoise;
+          const pseudoNoise = (((row * 43 + col * 29) % 29) / 29.0 - 0.5) * 0.045;
+          const baseGrey = 0.41 + 0.15 * t + pseudoNoise;
           colors.push(baseGrey, baseGrey * 0.98, baseGrey * 0.95);
         }
       }
@@ -103,8 +151,18 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
       geo.computeVertexNormals();
     }
 
+    // Cargar mapa de normales de micro-grano de regolito lunar (tileable 512x512)
+    const texLoader = new THREE.TextureLoader();
+    const regolithNormal = texLoader.load("/textures/regolith_micro_normal.png");
+    regolithNormal.wrapS = THREE.RepeatWrapping;
+    regolithNormal.wrapT = THREE.RepeatWrapping;
+    regolithNormal.repeat.set(28, 28);
+    regolithNormal.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
+      normalMap: regolithNormal,
+      normalScale: new THREE.Vector2(0.35, 0.35),
       roughness: 0.96,
       metalness: 0.0,
       flatShading: false,
@@ -116,22 +174,19 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
 
     // Marcador de precision del mastil del observador (CSA Rover / CLPS Lander) en (0, 0)
     const mastHeightUnits = 0.35 + patch.site.observer_height_m * 0.18;
-    const mastGeo = new THREE.CylinderGeometry(0.05, 0.05, mastHeightUnits, 12);
+    const mastGeo = new THREE.CylinderGeometry(0.045, 0.045, mastHeightUnits, 14);
     const mastMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
     const mastMesh = new THREE.Mesh(mastGeo, mastMat);
     mastMesh.position.set(0, mastHeightUnits / 2, 0);
     mastMesh.castShadow = true;
     scene.add(mastMesh);
 
-    const beaconGeo = new THREE.SphereGeometry(0.12, 16, 16);
+    const beaconGeo = new THREE.SphereGeometry(0.11, 16, 16);
     const beaconMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
     const beacon = new THREE.Mesh(beaconGeo, beaconMat);
     beacon.position.set(0, mastHeightUnits, 0);
     scene.add(beacon);
 
-    let yaw = 0.45;
-    let pitch = 0.52;
-    let dist = 21.0;
     let isDragging = false;
     let prevX = 0;
     let prevY = 0;
@@ -144,8 +199,12 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
     };
     const onMove = (e: PointerEvent) => {
       if (!isDragging) return;
-      yaw -= (e.clientX - prevX) * 0.008;
-      pitch = Math.max(0.15, Math.min(1.45, pitch + (e.clientY - prevY) * 0.008));
+      const distScale = Math.max(0.25, Math.min(1.0, camStateRef.current.dist / 20.0));
+      targetCamRef.current.yaw -= (e.clientX - prevX) * 0.007 * distScale;
+      targetCamRef.current.pitch = Math.max(
+        0.1,
+        Math.min(1.48, targetCamRef.current.pitch + (e.clientY - prevY) * 0.007 * distScale),
+      );
       prevX = e.clientX;
       prevY = e.clientY;
     };
@@ -154,7 +213,11 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      dist = Math.max(10.0, Math.min(45.0, dist + e.deltaY * 0.02));
+      const stepScale = Math.max(0.2, camStateRef.current.dist / 18.0);
+      targetCamRef.current.dist = Math.max(
+        4.2,
+        Math.min(42.0, targetCamRef.current.dist + e.deltaY * 0.016 * stepScale),
+      );
     };
 
     dom.addEventListener("pointerdown", onDown);
@@ -163,8 +226,14 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
     dom.addEventListener("wheel", onWheel, { passive: false });
 
     let animId = 0;
+    const damping = 0.09;
     const animate = () => {
       animId = requestAnimationFrame(animate);
+      camStateRef.current.yaw += (targetCamRef.current.yaw - camStateRef.current.yaw) * damping;
+      camStateRef.current.pitch += (targetCamRef.current.pitch - camStateRef.current.pitch) * damping;
+      camStateRef.current.dist += (targetCamRef.current.dist - camStateRef.current.dist) * damping;
+
+      const { yaw, pitch, dist } = camStateRef.current;
       camera.position.set(
         dist * Math.cos(pitch) * Math.sin(yaw),
         dist * Math.sin(pitch),
@@ -194,6 +263,7 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
       window.removeEventListener("resize", onResize);
       geo.dispose();
       mat.dispose();
+      regolithNormal.dispose();
       mastGeo.dispose();
       mastMat.dispose();
       beaconGeo.dispose();
@@ -206,7 +276,7 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
     if (!currentSample || !sunLightRef.current) return;
     const az = (currentSample.sun.azimuth_deg * Math.PI) / 180.0;
     const el = Math.max(0.02, (currentSample.sun.elevation_deg * Math.PI) / 180.0);
-    const r = 26.0;
+    const r = 28.0;
     sunLightRef.current.position.set(
       r * Math.cos(el) * Math.sin(az),
       r * Math.sin(el),
@@ -217,25 +287,50 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
   if (!patch) {
     return (
       <div className="viewport-stage" style={{ display: "grid", placeItems: "center" }}>
-        <span className="mono-telemetry">Cargando malla topográfica 3D LOLA...</span>
+        <span className="mono-telemetry">Cargando malla topográfica 3D LOLA (128×128)...</span>
       </div>
     );
   }
 
   return (
-    <div className="viewport-stage" aria-label="Superficie topografica 3D local LOLA con sombreado fotorrealista de regolito">
+    <div className="viewport-stage" aria-label="Superficie topografica 3D local LOLA 128x128 con sombreado fotorrealista de regolito">
       <div className="viewport-overlay-top">
         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+          {onBackToGlobe && (
+            <button
+              type="button"
+              className="hud-btn-mini"
+              onClick={onBackToGlobe}
+              style={{ borderColor: "rgba(56, 189, 248, 0.55)", color: "#38bdf8" }}
+            >
+              ← Volver al Globo 3D
+            </button>
+          )}
           <span className="hud-pill mono-telemetry">
-            Malla 3D: {patch.grid_size}×{patch.grid_size} ({patch.step_m.toFixed(0)} m/celda)
+            Malla 3D HD: 128×128 (DEM base {patch.grid_size}×{patch.grid_size}, {patch.step_m.toFixed(0)} m/celda)
           </span>
           <span className="hud-pill mono-telemetry">
             [{patch.min_elevation_m.toFixed(0)} m, {patch.max_elevation_m.toFixed(0)} m]
           </span>
         </div>
 
-        {/* Conmutador de sombreado: Fotorealista (Regolito) vs Capa Cientifica (Altimetria LOLA) */}
-        <div style={{ display: "flex", gap: "4px" }}>
+        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="hud-btn-mini"
+            onClick={() => handleZoomStep("in")}
+            title="Acercar cámara a la superficie local"
+          >
+            ＋ Zoom
+          </button>
+          <button
+            type="button"
+            className="hud-btn-mini"
+            onClick={() => handleZoomStep("out")}
+            title="Alejar cámara"
+          >
+            － Zoom
+          </button>
           <button
             type="button"
             className={`hud-btn-mini ${terrainShaderMode === "regolith" ? "active" : ""}`}
@@ -263,7 +358,7 @@ export function Terrain3D({ patch, currentSample, mode }: Terrain3DProps) {
         </span>
         <span className="hud-pill">
           {terrainShaderMode === "regolith"
-            ? "Sombreado fotorrealista de regolito lunar con proyección de sombras astronómicas"
+            ? "Sombreado PBR de regolito lunar con micro-normales y sombras astronómicas reales"
             : mode === "edu"
               ? "Las zonas azules son cráteres profundos; las doradas son cumbres iluminadas"
               : `Fuente: ${patch.dem_product} (${patch.horizon_source})`}
