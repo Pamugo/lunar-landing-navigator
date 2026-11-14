@@ -12,6 +12,8 @@ import type {
   HealthResponse,
   HorizonProfile,
   HorizonRequest,
+  SolarEnergyRequest,
+  SolarEnergySummary,
   TerrainPatch,
   TerrainPatchRequest,
   VisibilityRequest,
@@ -101,6 +103,13 @@ export const apiClient = {
 
   compareSites: (payload: ComparisonRequest, signal?: AbortSignal): Promise<ComparisonResult> =>
     request<ComparisonResult>("/compare", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      ...(signal ? { signal } : {}),
+    }),
+
+  fetchSolarEnergy: (payload: SolarEnergyRequest, signal?: AbortSignal): Promise<SolarEnergySummary> =>
+    request<SolarEnergySummary>("/solar-energy", {
       method: "POST",
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {}),

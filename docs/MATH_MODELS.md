@@ -180,11 +180,75 @@ Algoritmo:
 Contexto físico útil (sanity checks): en el polo exacto la elevación solar oscila ±1.54° (oblicuidad del ecuador lunar respecto a la eclíptica) a lo largo del año dracónico;
 la elevación de la Tierra en el polo oscila ≈ ±6.7° (libración en latitud) con periodo de un mes dracónico (27.21 d); en la cara oculta (p. ej. Chang'e 4) la Tierra nunca es visible.
 
-## 5. Energía (proxies)
+## 5. Energía Solar y Acimut (RF-05)
 
-- Irradiancia: $S(t) = 1361\ \text{W/m}^2 \cdot (1\ \text{UA}/r_\odot)^2$.
-- Panel vertical con seguimiento en acimut: $P/P_0 = f(t)\cos e_\odot$. Panel horizontal: $P/P_0 = f(t)\max(0,\sin e_\odot)$.
-- Fracción iluminada en ventana $T$: $\frac{1}{T}\int_T \mathbb 1[f(t) > 0]\,dt$; noche más larga = mayor intervalo continuo con $f = 0$.
+### 5.1 Irradiancia solar espacial AM0 ajustada por distancia heliocéntrica
+
+La irradiancia solar en el espacio exterior (Air Mass Zero, AM0) a 1 UA se establece nominalmente en $S_0 = 1368.0\ \text{W/m}^2$. A la distancia heliocéntrica instantánea $d_{au}(t)$ (en unidades astronómicas, $\text{UA} = 149\,597\,870.7\text{ km}$), la irradiancia directa incidente considerando la fracción visible del disco solar $f(t) \in [0, 1]$ (§3.3) es:
+
+$$
+S(t) = \frac{S_0}{d_{au}(t)^2} \cdot f(t) \quad [\text{W/m}^2]
+$$
+
+Si el Sol está por debajo del horizonte matemático local ($e_\odot(t) \le 0$) o totalmente ocultado por el relieve ($f(t) = 0$), el flujo de radiación directa es nulo ($S(t) = 0$).
+
+### 5.2 Modelado de las Tres Arquitecturas de Paneles Fotovoltaicos
+
+Sea $e_\odot(t)$ la elevación solar aparente y $A_\odot(t)$ el acimut solar en el marco topocéntrico local. Para $e_\odot(t) > 0$:
+
+1. **Panel Horizontal (`horizontal_panel`)**:
+   El panel reposa plano sobre la superficie lunar ($\hat{\mathbf{n}} = \hat{\mathbf{u}}$). El ángulo de incidencia respecto a la normal es el ángulo cenital $z = 90^\circ - e_\odot$:
+
+   $$
+   P_{\text{horiz}}(t) = S(t) \cdot \sin e_\odot(t) \quad [\text{W/m}^2]
+   $$
+
+2. **Panel Vertical con Seguimiento en Acimut (`tracking_vertical_panel`)**:
+   El panel se mantiene vertical y rota continuamente en acimut para encarar directamente al Sol ($A_{\text{panel}} = A_\odot(t)$). El ángulo de incidencia respecto a la normal del panel es exactamente la elevación solar $e_\odot$:
+
+   $$
+   P_{\text{track}}(t) = S(t) \cdot \cos e_\odot(t) \quad [\text{W/m}^2]
+   $$
+
+   > **Relevancia física polar:** En el polo sur lunar, la elevación solar es rasante ($e_\odot \in [-1.5^\circ, +1.5^\circ]$). Por tanto, $\sin e_\odot \approx 0.026$ mientras que $\cos e_\odot \approx 0.9997$. Esto implica que **un panel vertical genera hasta 40–50 veces más potencia que un panel horizontal**, justificando el diseño vertical de mástiles en misiones Artemis y rovers polares.
+
+3. **Panel Vertical Fijo a Acimut $A_{\text{panel}}$ (`fixed_vertical_panel`)**:
+   El panel se fija rígidamente en la superficie lunar encarando un acimut constante $A_{\text{panel}} \in [0^\circ, 360^\circ)$. El producto escalar entre la normal del panel y el vector solar introduce el factor coseno acimutal:
+
+   $$
+   P_{\text{fixed}}(t; A_{\text{panel}}) = S(t) \cdot \cos e_\odot(t) \cdot \max\big(0,\; \cos(A_\odot(t) - A_{\text{panel}})\big) \quad [\text{W/m}^2]
+   $$
+
+   Si el Sol incide por la parte posterior del panel ($\cos(A_\odot - A_{\text{panel}}) \le 0$), el panel no recibe radiación directa ($P = 0$).
+
+### 5.3 Integración de Energía Acumulada
+
+Para una serie temporal muestreada con paso temporal $\Delta t_{\text{hours}} = \frac{\Delta t_{\text{min}}}{60}$:
+
+$$
+E = \frac{\Delta t_{\text{hours}}}{1000} \sum_{k=1}^N P(t_k) \quad [\text{kWh/m}^2]
+$$
+
+El flujo medio se define como $\bar{P} = \frac{1}{N}\sum_{k=1}^N P(t_k)\ [\text{W/m}^2]$ y el flujo pico como $P_{\text{max}} = \max_k P(t_k)\ [\text{W/m}^2]$.
+
+### 5.4 Buscador Automático del Acimut Óptimo de Aterrizaje
+
+Para una ventana de misión dada, el algoritmo evalúa la energía acumulada generada por un panel vertical fijo sobre los 360 grados discretos de acimut $\psi \in \{0^\circ, 1^\circ, \dots, 359^\circ\}$:
+
+$$
+E(\psi) = \frac{\Delta t_{\text{hours}}}{1000} \sum_{k=1}^N \Big[ S(t_k) \cos e_\odot(t_k) \cdot \max\big(0,\; \cos(A_\odot(t_k) - \psi)\big) \Big] \quad [\text{kWh/m}^2]
+$$
+
+El **Acimut Óptimo de Orientación** y su **Energía Máxima** son:
+
+$$
+A_{\text{opt}} = \arg\max_{\psi \in [0^\circ, 359^\circ]} E(\psi), \qquad E_{\text{opt}} = \max_{\psi \in [0^\circ, 359^\circ]} E(\psi)
+$$
+
+Este cálculo tiene en cuenta intrínsecamente:
+1. La trayectoria del acimut solar durante los días lunares de la misión.
+2. Los macizos y montañas que bloquean el Sol en determinados acimuts (donde $f(t_k) = 0$).
+3. Las variaciones de distancia Sol–Luna a lo largo de la órbita heliocéntrica.
 
 ## 6. Tolerancias de validación
 

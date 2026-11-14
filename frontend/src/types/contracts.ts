@@ -196,6 +196,36 @@ export interface ScientificVerificationSeal {
   verified_at_utc: string;
 }
 
+export interface SolarArchitectureEnergy {
+  architecture: string;
+  azimuth_deg: number | null;
+  total_energy_kwh_m2: number;
+  peak_flux_w_m2: number;
+  mean_flux_w_m2: number;
+}
+
+export interface OptimalAzimuthResult {
+  optimal_panel_azimuth_deg: number;
+  optimal_fixed_energy_kwh_m2: number;
+  azimuth_energy_curve_kwh_m2: number[];
+}
+
+export interface SolarEnergySummary {
+  solar_constant_am0_w_m2: number;
+  mean_solar_distance_au: number;
+  horizontal_panel: SolarArchitectureEnergy;
+  tracking_vertical_panel: SolarArchitectureEnergy;
+  fixed_vertical_panel: SolarArchitectureEnergy;
+  optimal_azimuth: OptimalAzimuthResult;
+}
+
+export interface SolarEnergyRequest {
+  site: LunarCoordinate;
+  window: TimeWindow;
+  fixed_azimuth_deg: number;
+  ephemeris: EphemerisKernel;
+}
+
 export interface HealthResponse {
   status: string;
   contract_version: string;
