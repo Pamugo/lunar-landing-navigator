@@ -539,6 +539,7 @@ export function App() {
               sites={curatedSites}
               selectedSiteIds={selectedSites.map((s) => s.site_id).filter((id): id is string => Boolean(id))}
               focusedSite={focusedSite}
+              mode={mode}
               onSelectCuratedSite={handleSelectCuratedFromMap}
               onSelectCustomCoordinate={handleAddCustomCoordinate}
             />
