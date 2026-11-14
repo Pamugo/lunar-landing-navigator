@@ -15,6 +15,7 @@ export interface ComparisonGridProps {
   focusedIndex: number;
   onFocusIndex: (idx: number) => void;
   onToggleCuratedSite: (site: CuratedSite) => void;
+  onRemoveSite: (idx: number) => void;
   onAddCustomCoordinate: (lat_deg: number, lon_deg: number) => void;
   metricsByKey: Record<string, SiteSummaryMetrics>;
   currentSampleByKey: Record<string, VisibilitySample | undefined>;
@@ -32,6 +33,7 @@ export function ComparisonGrid({
   focusedIndex,
   onFocusIndex,
   onToggleCuratedSite,
+  onRemoveSite,
   onAddCustomCoordinate,
   metricsByKey,
   currentSampleByKey,
@@ -111,10 +113,17 @@ export function ComparisonGrid({
                 type="button"
                 className={`site-chip ${isSelected ? "selected" : ""} ${isFocused ? "focused" : ""}`}
                 onClick={() => onToggleCuratedSite(site)}
-                title={`${site.name} (${site.lat_deg}°, ${site.lon_deg}°)`}
+                title={
+                  isSelected
+                    ? selectedSites.length > 1
+                      ? `Clic para quitar ${site.name} del comparador`
+                      : `${site.name} (debe quedar al menos 1 sitio activo)`
+                    : `Añadir ${site.name} (${site.lat_deg}°, ${site.lon_deg}°)`
+                }
               >
                 {isSelected ? "✓ " : "+ "}
                 {site.name.split("-")[0]?.split("(")[0]?.trim()}
+                {isSelected && selectedSites.length > 1 ? " ✕" : ""}
               </button>
             );
           })}
@@ -181,9 +190,32 @@ export function ComparisonGrid({
                     Lat {coord.lat_deg.toFixed(4)}° · Lon {coord.lon_deg.toFixed(4)}° · h₀={coord.observer_height_m.toFixed(1)}m
                   </div>
                 </div>
-                <span className="category-tag">
-                  {curated ? curated.category.replace("_", " ") : "custom"}
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className="category-tag">
+                    {curated ? curated.category.replace("_", " ") : "custom"}
+                  </span>
+                  {selectedSites.length > 1 && (
+                    <button
+                      type="button"
+                      className="hud-btn-mini"
+                      style={{
+                        padding: "2px 7px",
+                        fontSize: "11px",
+                        lineHeight: 1.2,
+                        color: "var(--text-secondary)",
+                        borderColor: "rgba(255, 255, 255, 0.16)",
+                      }}
+                      title="Quitar este sitio del comparador"
+                      aria-label={`Quitar ${curated?.name ?? "sitio personalizado"} del comparador`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveSite(index);
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Estado instantaneo en el cursor temporal */}
