@@ -1,16 +1,16 @@
 import urllib.request
-import re
 
-url = "https://svs.gsfc.nasa.gov/4720/"
-req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-try:
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        html = resp.read().decode("utf-8", errors="ignore")
-        matches = re.findall(r'href=["\']([^"\']+\.(?:jpg|png|tif|tiff))["\']', html, re.I)
-        print("Total image links found on SVS 4720:", len(matches))
-        for m in sorted(set(matches)):
-            m_lower = m.lower()
-            if any(k in m_lower for k in ["2k", "1k", "bump", "disp", "lroc", "ldim", "color", "moon"]):
-                print(" ", m)
-except Exception as e:
-    print("Failed:", e)
+candidates = [
+    "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_2k.jpg",
+    "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_3_8bit.jpg",
+    "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_1k.jpg",
+    "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/moon_1024.jpg",
+]
+
+for c in candidates:
+    req = urllib.request.Request(c, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            print(c, resp.status, resp.headers.get("Content-Length"), resp.headers.get("Content-Type"))
+    except Exception as e:
+        print(c, "Failed:", e)
