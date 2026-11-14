@@ -242,7 +242,11 @@ export function App() {
 
   // Evaluar comparacion y series temporales cuando cambian sitios, altura o ventana
   useEffect(() => {
-    if (selectedSites.length === 0) return;
+    if (selectedSites.length === 0) {
+      setMetricsByKey({});
+      setSeriesByKey({});
+      return;
+    }
     const ctrl = new AbortController();
     const ephem: EphemerisKernel = "DE421";
 
@@ -291,7 +295,13 @@ export function App() {
     return () => ctrl.abort();
   }, [selectedSites, timeWindow]);
 
-  const focusedSite = selectedSites[focusedIndex] ?? selectedSites[0]!;
+  const defaultPreviewSite: LunarCoordinate = {
+    lat_deg: -89.68,
+    lon_deg: -166.0,
+    observer_height_m: selectedHardware.observer_height_m,
+    site_id: "shackleton-rim",
+  };
+  const focusedSite = selectedSites[focusedIndex] ?? selectedSites[0] ?? defaultPreviewSite;
   const focusedKey = coordinateKey(focusedSite);
   const focusedSeries = seriesByKey[focusedKey] ?? null;
   const focusedCurated = curatedSites.find((s) => s.id === focusedSite.site_id);
@@ -352,9 +362,9 @@ export function App() {
 
   const handleRemoveSite = (indexToRemove: number) => {
     setSelectedSites((prev) => {
-      if (prev.length <= 1) return prev;
       const next = prev.filter((_, idx) => idx !== indexToRemove);
       setFocusedIndex((prevFocus) => {
+        if (next.length === 0) return 0;
         if (prevFocus >= next.length) return Math.max(0, next.length - 1);
         if (indexToRemove < prevFocus) return Math.max(0, prevFocus - 1);
         return prevFocus;
@@ -363,14 +373,15 @@ export function App() {
     });
   };
 
+  const handleClearAllSites = () => {
+    setSelectedSites([]);
+    setFocusedIndex(0);
+  };
+
   const handleToggleCuratedSite = (site: CuratedSite) => {
     const existingIdx = selectedSites.findIndex((s) => s.site_id === site.id);
     if (existingIdx !== -1) {
-      if (selectedSites.length > 1) {
-        handleRemoveSite(existingIdx);
-      } else {
-        setFocusedIndex(0);
-      }
+      handleRemoveSite(existingIdx);
       return;
     }
     const newCoord: LunarCoordinate = {
@@ -586,6 +597,7 @@ export function App() {
             onFocusIndex={setFocusedIndex}
             onToggleCuratedSite={handleToggleCuratedSite}
             onRemoveSite={handleRemoveSite}
+            onClearAllSites={handleClearAllSites}
             onAddCustomCoordinate={handleAddCustomCoordinate}
             metricsByKey={metricsByKey}
             currentSampleByKey={currentSampleByKey}
