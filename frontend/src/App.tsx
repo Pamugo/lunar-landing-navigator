@@ -350,10 +350,27 @@ export function App() {
 
   const focusedSample = currentSampleByKey[focusedKey] ?? null;
 
+  const handleRemoveSite = (indexToRemove: number) => {
+    setSelectedSites((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter((_, idx) => idx !== indexToRemove);
+      setFocusedIndex((prevFocus) => {
+        if (prevFocus >= next.length) return Math.max(0, next.length - 1);
+        if (indexToRemove < prevFocus) return Math.max(0, prevFocus - 1);
+        return prevFocus;
+      });
+      return next;
+    });
+  };
+
   const handleToggleCuratedSite = (site: CuratedSite) => {
     const existingIdx = selectedSites.findIndex((s) => s.site_id === site.id);
     if (existingIdx !== -1) {
-      setFocusedIndex(existingIdx);
+      if (selectedSites.length > 1) {
+        handleRemoveSite(existingIdx);
+      } else {
+        setFocusedIndex(0);
+      }
       return;
     }
     const newCoord: LunarCoordinate = {
@@ -370,6 +387,11 @@ export function App() {
   };
 
   const handleSelectCuratedFromMap = (siteId: string) => {
+    const existingIdx = selectedSites.findIndex((s) => s.site_id === siteId);
+    if (existingIdx !== -1) {
+      setFocusedIndex(existingIdx);
+      return;
+    }
     const site = curatedSites.find((s) => s.id === siteId);
     if (site) handleToggleCuratedSite(site);
   };
@@ -563,6 +585,7 @@ export function App() {
             focusedIndex={focusedIndex}
             onFocusIndex={setFocusedIndex}
             onToggleCuratedSite={handleToggleCuratedSite}
+            onRemoveSite={handleRemoveSite}
             onAddCustomCoordinate={handleAddCustomCoordinate}
             metricsByKey={metricsByKey}
             currentSampleByKey={currentSampleByKey}
