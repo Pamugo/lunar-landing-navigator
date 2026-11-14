@@ -151,9 +151,9 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
       geo.computeVertexNormals();
     }
 
-    // Cargar mapa de normales de micro-grano de regolito lunar (tileable 512x512)
+    // Cargar mapa de normales de micro-grano de regolito lunar (tileable 512x512) con cache-busting
     const texLoader = new THREE.TextureLoader();
-    const regolithNormal = texLoader.load("/textures/regolith_micro_normal.png");
+    const regolithNormal = texLoader.load("/textures/regolith_micro_normal.png?v=20261114_nasa4k_v5");
     regolithNormal.wrapS = THREE.RepeatWrapping;
     regolithNormal.wrapT = THREE.RepeatWrapping;
     regolithNormal.repeat.set(28, 28);
