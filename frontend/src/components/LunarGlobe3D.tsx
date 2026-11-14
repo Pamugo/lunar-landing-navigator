@@ -36,90 +36,6 @@ function vector3ToLatLon(point: THREE.Vector3): { lat_deg: number; lon_deg: numb
   };
 }
 
-function createProceduralMoonTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1024;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return new THREE.CanvasTexture(canvas);
-  }
-
-  // Base regolito lunar
-  const grad = ctx.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0.0, "#4B5563");
-  grad.addColorStop(0.5, "#64748B");
-  grad.addColorStop(0.88, "#475569");
-  grad.addColorStop(1.0, "#1E293B"); // Polo sur con sombras profundas PSR
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 1024, 512);
-
-  // Maria lunares (manchas basálticas oscuras en la cara visible)
-  const maria = [
-    { x: 560, y: 210, rx: 75, ry: 55, alpha: 0.32 }, // Mare Tranquillitatis / Serenitatis
-    { x: 430, y: 190, rx: 95, ry: 75, alpha: 0.35 }, // Oceanus Procellarum / Imbrium
-    { x: 640, y: 255, rx: 45, ry: 40, alpha: 0.28 }, // Mare Crisium
-    { x: 510, y: 390, rx: 140, ry: 60, alpha: 0.25 }, // Cuenca South Pole-Aitken
-  ];
-  for (const m of maria) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(m.x, m.y, m.rx, m.ry, 0, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(15, 23, 42, ${m.alpha})`;
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // Cráteres deterministas
-  let seed = 1737400;
-  const nextRand = () => {
-    seed = (seed * 1664525 + 1013904223) % 4294967296;
-    return seed / 4294967296;
-  };
-  for (let i = 0; i < 220; i++) {
-    const cx = nextRand() * 1024;
-    const cy = nextRand() * 512;
-    const r = 2 + nextRand() * 18;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(15, 23, 42, 0.22)";
-    ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(226, 232, 240, 0.16)";
-    ctx.stroke();
-  }
-
-  // Reticula selenografica cada 30 deg + anillo polar sur 80°S
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
-  ctx.lineWidth = 1;
-  for (let lon = -150; lon <= 180; lon += 30) {
-    const x = ((lon + 180) / 360) * 1024;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, 512);
-    ctx.stroke();
-  }
-  for (let lat = -60; lat <= 60; lat += 30) {
-    const y = ((90 - lat) / 180) * 512;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(1024, y);
-    ctx.stroke();
-  }
-  // Anillo destacado 80°S (region polar sur del reto)
-  const y80S = ((90 - -80) / 180) * 512;
-  ctx.strokeStyle = "rgba(56, 189, 248, 0.55)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, y80S);
-  ctx.lineTo(1024, y80S);
-  ctx.stroke();
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  return tex;
-}
-
 export function LunarGlobe3D({
   sites,
   selectedSiteIds,
@@ -135,8 +51,8 @@ export function LunarGlobe3D({
 
   // Estado de camara esferica (yaw, pitch, distance)
   const camStateRef = useRef({ yaw: 0.25, pitch: -1.28, dist: 2.35 });
-  const markersRef = useRef<Map<string, THREE.Mesh>>(new Map());
-  const focusRingRef = useRef<THREE.Mesh | null>(null);
+  const markersRef = useRef<Map<string, THREE.Group>>(new Map());
+  const focusReticleRef = useRef<THREE.Group | null>(null);
   const sunArrowRef = useRef<THREE.ArrowHelper | null>(null);
   const earthArrowRef = useRef<THREE.ArrowHelper | null>(null);
   const sunLightRef = useRef<THREE.DirectionalLight | null>(null);
@@ -178,77 +94,143 @@ export function LunarGlobe3D({
     container.innerHTML = "";
     container.appendChild(renderer.domElement);
 
-    // Iluminacion espacial: luz ambiental tenue + luz solar direccional (terminador real)
-    const ambient = new THREE.AmbientLight(0x334155, 0.75);
-    scene.add(ambient);
-
-    const sunLight = new THREE.DirectionalLight(0xfffbeb, 2.2);
-    sunLight.position.set(4, -1.2, 4);
+    // 1. Iluminacion astronomica real en el vacio espacial (Airless Body)
+    // Luz solar directa con alto contraste
+    const sunLight = new THREE.DirectionalLight(0xfff8ee, 3.2);
+    sunLight.position.set(10, 0, 0);
     scene.add(sunLight);
     sunLightRef.current = sunLight;
 
-    // Esfera lunar R = 1.0 unidad (= 1737.4 km)
-    const moonGeo = new THREE.SphereGeometry(1.0, 64, 64);
-    const moonTex = createProceduralMoonTexture();
-    // Alinear UV de Three.js con nuestra convencion Z = lon 0
+    // Faint Earthshine / Luz cenicienta en el lado no iluminado
+    const earthshine = new THREE.HemisphereLight(0x1e293b, 0x030712, 0.24);
+    scene.add(earthshine);
+
+    // 2. Texturas Fotograficas Reales de la NASA (LRO WAC Albedo + LOLA Bump Map)
+    const texLoader = new THREE.TextureLoader();
+    const moonAlbedo = texLoader.load("/textures/moon_albedo_map.jpg", () => {
+      renderer.render(scene, camera);
+    });
+    moonAlbedo.colorSpace = THREE.SRGBColorSpace;
+    moonAlbedo.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+    const moonBump = texLoader.load("/textures/moon_bump_lola.jpg", () => {
+      renderer.render(scene, camera);
+    });
+    moonBump.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+    // 3. Esfera lunar de alta densidad (128x128 / 256x256)
+    const segments = isMobile ? 128 : 256;
+    const moonGeo = new THREE.SphereGeometry(1.0, segments, segments);
+    // Alinear el centro del mosaico equirrectangular (lon 0° Prime Meridian) con el eje +Z hacia la Tierra
     moonGeo.rotateY(-Math.PI / 2);
+
+    // Material PBR de regolito lunar real: mate (roughness 0.95), sin brillo metalico, relieve LOLA
     const moonMat = new THREE.MeshStandardMaterial({
-      map: moonTex,
-      roughness: 0.92,
-      metalness: 0.04,
+      map: moonAlbedo,
+      bumpMap: moonBump,
+      bumpScale: 0.042,
+      roughness: 0.95,
+      metalness: 0.0,
     });
     const moonMesh = new THREE.Mesh(moonGeo, moonMat);
     scene.add(moonMesh);
 
-    // Anillo marcador del sitio enfocado
-    const ringGeo = new THREE.RingGeometry(0.028, 0.044, 32);
-    const ringMat = new THREE.MeshBasicMaterial({
+    // 4. Reticula de telemetria fina tipo NASA para el sitio enfocado
+    const reticleGroup = new THREE.Group();
+    const innerRingGeo = new THREE.RingGeometry(0.016, 0.019, 32);
+    const reticleMat = new THREE.MeshBasicMaterial({
       color: 0xfbbf24,
       side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
     });
-    const focusRing = new THREE.Mesh(ringGeo, ringMat);
-    scene.add(focusRing);
-    focusRingRef.current = focusRing;
+    const innerRing = new THREE.Mesh(innerRingGeo, reticleMat);
+    reticleGroup.add(innerRing);
 
-    // Vectores 3D hacia el Sol (#F59E0B) y la Tierra (#06B6D4)
+    const outerRingGeo = new THREE.RingGeometry(0.026, 0.028, 32);
+    const outerRing = new THREE.Mesh(outerRingGeo, reticleMat);
+    reticleGroup.add(outerRing);
+
+    const tickMat = new THREE.LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.85 });
+    const tickPoints = [
+      new THREE.Vector3(0, 0.019, 0),
+      new THREE.Vector3(0, 0.033, 0),
+      new THREE.Vector3(0, -0.019, 0),
+      new THREE.Vector3(0, -0.033, 0),
+      new THREE.Vector3(0.019, 0, 0),
+      new THREE.Vector3(0.033, 0, 0),
+      new THREE.Vector3(-0.019, 0, 0),
+      new THREE.Vector3(-0.033, 0, 0),
+    ];
+    const tickGeo = new THREE.BufferGeometry().setFromPoints(tickPoints);
+    const tickLines = new THREE.LineSegments(tickGeo, tickMat);
+    reticleGroup.add(tickLines);
+
+    scene.add(reticleGroup);
+    focusReticleRef.current = reticleGroup;
+
+    // 5. Vectores 3D estilizados hacia el Sol (#F59E0B) y la Tierra (#06B6D4)
     const sunArrow = new THREE.ArrowHelper(
       new THREE.Vector3(0, 1, 0),
       new THREE.Vector3(0, -1, 0),
-      0.48,
+      0.46,
       0xf59e0b,
-      0.09,
-      0.05,
+      0.08,
+      0.04,
     );
     const earthArrow = new THREE.ArrowHelper(
       new THREE.Vector3(0, 0, 1),
       new THREE.Vector3(0, -1, 0),
-      0.48,
+      0.46,
       0x06b6d4,
-      0.09,
-      0.05,
+      0.08,
+      0.04,
     );
     scene.add(sunArrow);
     scene.add(earthArrow);
     sunArrowRef.current = sunArrow;
     earthArrowRef.current = earthArrow;
 
-    // Marcadores de los 9 sitios curados
-    const markerMap = new Map<string, THREE.Mesh>();
+    // 6. Marcadores minimalistas de precision para los sitios curados
+    const markerMap = new Map<string, THREE.Group>();
+    const raycastTargets: THREE.Mesh[] = [];
+
     for (const site of sites) {
-      const mGeo = new THREE.SphereGeometry(0.022, 16, 16);
       const isPolar = site.region === "south_polar";
-      const mMat = new THREE.MeshBasicMaterial({
+      const siteGroup = new THREE.Group();
+      const pos = latLonToVector3(site.lat_deg, site.lon_deg, 1.008);
+      siteGroup.position.copy(pos);
+      siteGroup.lookAt(pos.clone().multiplyScalar(2.0));
+
+      // Punto central
+      const dotGeo = new THREE.SphereGeometry(0.007, 12, 12);
+      const dotMat = new THREE.MeshBasicMaterial({
         color: isPolar ? 0x38bdf8 : 0xfbbf24,
       });
-      const mesh = new THREE.Mesh(mGeo, mMat);
-      mesh.position.copy(latLonToVector3(site.lat_deg, site.lon_deg, 1.012));
-      mesh.userData = { siteId: site.id };
-      scene.add(mesh);
-      markerMap.set(site.id, mesh);
+      const dot = new THREE.Mesh(dotGeo, dotMat);
+      dot.userData = { siteId: site.id };
+      siteGroup.add(dot);
+      raycastTargets.push(dot);
+
+      // Anillo exterior fino
+      const ringG = new THREE.RingGeometry(0.012, 0.0145, 24);
+      const ringM = new THREE.MeshBasicMaterial({
+        color: isPolar ? 0x38bdf8 : 0xfbbf24,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.65,
+      });
+      const ringMesh = new THREE.Mesh(ringG, ringM);
+      ringMesh.userData = { siteId: site.id };
+      siteGroup.add(ringMesh);
+      raycastTargets.push(ringMesh);
+
+      scene.add(siteGroup);
+      markerMap.set(site.id, siteGroup);
     }
     markersRef.current = markerMap;
 
-    // Capa Dinamica Modo Educativo: Rutas del Historico de Misiones + Anillos PSR (Hielo de Agua)
+    // 7. Capa Dinamica Modo Educativo: Rutas Historicas de Misiones + Zonas PSR
     const eduGroup = new THREE.Group();
     const chronologicalIds = [
       "apollo-11",
@@ -263,16 +245,16 @@ export function LunarGlobe3D({
       const sA = siteById.get(chronologicalIds[i] ?? "");
       const sB = siteById.get(chronologicalIds[i + 1] ?? "");
       if (!sA || !sB) continue;
-      const vA = latLonToVector3(sA.lat_deg, sA.lon_deg, 1.014);
-      const vB = latLonToVector3(sB.lat_deg, sB.lon_deg, 1.014);
-      const mid = vA.clone().add(vB).multiplyScalar(0.5).normalize().multiplyScalar(1.16);
+      const vA = latLonToVector3(sA.lat_deg, sA.lon_deg, 1.012);
+      const vB = latLonToVector3(sB.lat_deg, sB.lon_deg, 1.012);
+      const mid = vA.clone().add(vB).multiplyScalar(0.5).normalize().multiplyScalar(1.14);
       const curve = new THREE.QuadraticBezierCurve3(vA, mid, vB);
       const arcPoints = curve.getPoints(36);
       const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
       const arcMat = new THREE.LineBasicMaterial({
         color: i >= 3 ? 0x38bdf8 : 0xfbbf24,
         transparent: true,
-        opacity: 0.65,
+        opacity: 0.55,
       });
       eduGroup.add(new THREE.Line(arcGeo, arcMat));
     }
@@ -281,15 +263,15 @@ export function LunarGlobe3D({
     for (const psrId of ["cabeus-crater", "shackleton-rim"]) {
       const psrSite = siteById.get(psrId);
       if (!psrSite) continue;
-      const psrRingGeo = new THREE.RingGeometry(0.036, 0.052, 32);
+      const psrRingGeo = new THREE.RingGeometry(0.032, 0.044, 32);
       const psrRingMat = new THREE.MeshBasicMaterial({
         color: 0x06b6d4,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.72,
+        opacity: 0.6,
       });
       const psrRing = new THREE.Mesh(psrRingGeo, psrRingMat);
-      const pPos = latLonToVector3(psrSite.lat_deg, psrSite.lon_deg, 1.011);
+      const pPos = latLonToVector3(psrSite.lat_deg, psrSite.lon_deg, 1.009);
       psrRing.position.copy(pPos);
       psrRing.lookAt(pPos.clone().multiplyScalar(2.0));
       eduGroup.add(psrRing);
@@ -298,7 +280,7 @@ export function LunarGlobe3D({
     scene.add(eduGroup);
     eduGroupRef.current = eduGroup;
 
-    // Interaccion de rotacion, zoom y clic (raycasting)
+    // 8. Interaccion de rotacion, zoom y clic (raycasting)
     let isDragging = false;
     let dragDistance = 0;
     let prevX = 0;
@@ -336,8 +318,7 @@ export function LunarGlobe3D({
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(ndc, camera);
 
-        const markerMeshes = Array.from(markerMap.values());
-        const hitMarkers = raycaster.intersectObjects(markerMeshes, false);
+        const hitMarkers = raycaster.intersectObjects(raycastTargets, false);
         if (hitMarkers.length > 0 && hitMarkers[0]) {
           const siteId = hitMarkers[0].object.userData.siteId as string | undefined;
           if (siteId) {
@@ -401,39 +382,52 @@ export function LunarGlobe3D({
       window.removeEventListener("resize", onResize);
       moonGeo.dispose();
       moonMat.dispose();
-      moonTex.dispose();
-      ringGeo.dispose();
-      ringMat.dispose();
+      moonAlbedo.dispose();
+      moonBump.dispose();
+      innerRingGeo.dispose();
+      outerRingGeo.dispose();
+      reticleMat.dispose();
+      tickGeo.dispose();
+      tickMat.dispose();
       renderer.dispose();
     };
   }, [sites]);
 
-  // Actualizar colores de marcadores, posicion enfocada y vectores Sol/Tierra
+  // Actualizar colores de marcadores, posicion de la reticula y orientacion de vectores astronomicos
   useEffect(() => {
     if (eduGroupRef.current) {
       eduGroupRef.current.visible = mode === "edu";
     }
 
-    for (const [siteId, mesh] of markersRef.current.entries()) {
-      const mat = mesh.material as THREE.MeshBasicMaterial;
+    for (const [siteId, group] of markersRef.current.entries()) {
       const isFocused = focusedSite.site_id === siteId;
       const isSelected = selectedSiteIds.includes(siteId);
-      if (isFocused) {
-        mat.color.setHex(0xfbbf24);
-        mesh.scale.setScalar(1.45);
-      } else if (isSelected) {
-        mat.color.setHex(0x38bdf8);
-        mesh.scale.setScalar(1.2);
-      } else {
-        mat.color.setHex(0x94a3b8);
-        mesh.scale.setScalar(0.95);
+
+      const dot = group.children[0] as THREE.Mesh | undefined;
+      const ring = group.children[1] as THREE.Mesh | undefined;
+      if (dot && ring) {
+        const dotMat = dot.material as THREE.MeshBasicMaterial;
+        const ringMat = ring.material as THREE.MeshBasicMaterial;
+        if (isFocused) {
+          dotMat.color.setHex(0xfbbf24);
+          ringMat.color.setHex(0xfbbf24);
+          group.scale.setScalar(1.4);
+        } else if (isSelected) {
+          dotMat.color.setHex(0x38bdf8);
+          ringMat.color.setHex(0x38bdf8);
+          group.scale.setScalar(1.2);
+        } else {
+          dotMat.color.setHex(0x94a3b8);
+          ringMat.color.setHex(0x94a3b8);
+          group.scale.setScalar(0.95);
+        }
       }
     }
 
-    const sitePos = latLonToVector3(focusedSite.lat_deg, focusedSite.lon_deg, 1.015);
-    if (focusRingRef.current) {
-      focusRingRef.current.position.copy(sitePos);
-      focusRingRef.current.lookAt(sitePos.clone().multiplyScalar(2.0));
+    const sitePos = latLonToVector3(focusedSite.lat_deg, focusedSite.lon_deg, 1.012);
+    if (focusReticleRef.current) {
+      focusReticleRef.current.position.copy(sitePos);
+      focusReticleRef.current.lookAt(sitePos.clone().multiplyScalar(2.0));
     }
 
     // Construir base local ENU en el sitio enfocado para orientar vectores Sol y Tierra
@@ -472,8 +466,9 @@ export function LunarGlobe3D({
       earthArrowRef.current.setDirection(earthDir);
       earthArrowRef.current.visible = true;
 
+      // Iluminacion global coherente del terminador lunar
       if (sunLightRef.current) {
-        sunLightRef.current.position.copy(sunDir.clone().multiplyScalar(6.0));
+        sunLightRef.current.position.copy(sunDir.clone().multiplyScalar(10.0));
       }
     }
   }, [focusedSite, selectedSiteIds, currentSample, mode]);
@@ -481,7 +476,7 @@ export function LunarGlobe3D({
   const focusedCuratedSite = sites.find((s) => s.id === focusedSite.site_id) ?? null;
 
   return (
-    <div className="viewport-stage" aria-label="Globo Lunar 3D interactivo con vectores Sol y Tierra">
+    <div className="viewport-stage" aria-label="Globo Lunar 3D fotorrealista con texturas NASA LROC y LOLA">
       <div className="viewport-overlay-top">
         <div className="hud-pill mono-telemetry">
           <span>Foco:</span>
