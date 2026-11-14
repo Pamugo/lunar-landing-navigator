@@ -19,6 +19,7 @@ data/ephemeris/*.tf
 data/ephemeris/*.tpc
 data/lola_dem/raw/
 data/lola_dem/cache/
+frontend/public/textures/south_pole_lola_hires.png
 *.tif
 *.tiff
 *.img
