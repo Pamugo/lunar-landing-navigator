@@ -141,6 +141,8 @@ export function LunarGlobe3D({
   const earthArrowRef = useRef<THREE.ArrowHelper | null>(null);
   const sunLightRef = useRef<THREE.DirectionalLight | null>(null);
   const eduGroupRef = useRef<THREE.Group | null>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   const applyCameraPreset = (preset: "south_pole" | "nearside" | "farside") => {
     setCameraPreset(preset);
@@ -346,8 +348,10 @@ export function LunarGlobe3D({
 
         const hitSphere = raycaster.intersectObject(moonMesh, false);
         if (hitSphere.length > 0 && hitSphere[0]) {
-          const { lat_deg, lon_deg } = vector3ToLatLon(hitSphere[0].point);
-          onSelectCustomCoordinate(lat_deg, lon_deg);
+          if (modeRef.current === "eng") {
+            const { lat_deg, lon_deg } = vector3ToLatLon(hitSphere[0].point);
+            onSelectCustomCoordinate(lat_deg, lon_deg);
+          }
         }
       }
     };

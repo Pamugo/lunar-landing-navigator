@@ -1,9 +1,11 @@
 import type { CuratedSite, LunarCoordinate } from "../types/contracts";
+import type { AppMode } from "./HeaderHUD";
 
 export interface PolarMap2DProps {
   sites: CuratedSite[];
   selectedSiteIds: string[];
   focusedSite: LunarCoordinate;
+  mode?: AppMode;
   onSelectCuratedSite: (siteId: string) => void;
   onSelectCustomCoordinate: (lat_deg: number, lon_deg: number) => void;
 }
@@ -26,6 +28,7 @@ export function PolarMap2D({
   sites,
   selectedSiteIds,
   focusedSite,
+  mode = "eng",
   onSelectCuratedSite,
   onSelectCustomCoordinate,
 }: PolarMap2DProps) {
@@ -35,6 +38,7 @@ export function PolarMap2D({
   const radiusPx = 142;
 
   const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (mode === "edu") return;
     const rect = e.currentTarget.getBoundingClientRect();
     const sx = ((e.clientX - rect.left) / rect.width) * size;
     const sy = ((e.clientY - rect.top) / rect.height) * size;
@@ -63,7 +67,7 @@ export function PolarMap2D({
 
       <svg
         viewBox={`0 0 ${size} ${size}`}
-        style={{ width: "100%", height: "100%", cursor: "crosshair" }}
+        style={{ width: "100%", height: "100%", cursor: mode === "edu" ? "default" : "crosshair" }}
         onClick={handleSvgClick}
       >
         {/* Anillos de latitud 82°S, 85°S, 88°S, 90°S */}
@@ -140,7 +144,11 @@ export function PolarMap2D({
       </svg>
 
       <div className="viewport-overlay-bottom">
-        <span className="hud-pill">Haz clic en cualquier punto del mapa polar para evaluar coordenadas personalizadas</span>
+        <span className="hud-pill">
+          {mode === "edu"
+            ? "Haz clic en los marcadores para explorar los sitios polares históricos y de interés"
+            : "Haz clic en cualquier punto del mapa polar para evaluar coordenadas personalizadas"}
+        </span>
       </div>
     </div>
   );

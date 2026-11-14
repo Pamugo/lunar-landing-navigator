@@ -144,35 +144,37 @@ export function ComparisonGrid({
           })}
         </div>
 
-        <form onSubmit={handleCustomSubmit} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <input
-            type="number"
-            step="0.01"
-            min="-90"
-            max="90"
-            className="hud-input mono-telemetry"
-            style={{ width: "78px" }}
-            value={customLat}
-            onChange={(e) => setCustomLat(e.target.value)}
-            aria-label="Latitud personalizada grados"
-            placeholder="Lat °"
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="-180"
-            max="180"
-            className="hud-input mono-telemetry"
-            style={{ width: "82px" }}
-            value={customLon}
-            onChange={(e) => setCustomLon(e.target.value)}
-            aria-label="Longitud personalizada grados"
-            placeholder="Lon °"
-          />
-          <button type="submit" className="hud-btn-mini" style={{ padding: "6px 10px" }}>
-            Evaluar Coord.
-          </button>
-        </form>
+        {mode === "eng" && (
+          <form onSubmit={handleCustomSubmit} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <input
+              type="number"
+              step="0.01"
+              min="-90"
+              max="90"
+              className="hud-input mono-telemetry"
+              style={{ width: "78px" }}
+              value={customLat}
+              onChange={(e) => setCustomLat(e.target.value)}
+              aria-label="Latitud personalizada grados"
+              placeholder="Lat °"
+            />
+            <input
+              type="number"
+              step="0.01"
+              min="-180"
+              max="180"
+              className="hud-input mono-telemetry"
+              style={{ width: "82px" }}
+              value={customLon}
+              onChange={(e) => setCustomLon(e.target.value)}
+              aria-label="Longitud personalizada grados"
+              placeholder="Lon °"
+            />
+            <button type="submit" className="hud-btn-mini" style={{ padding: "6px 10px" }}>
+              Evaluar Coord.
+            </button>
+          </form>
+        )}
       </div>
 
       {/* Tarjetas comparativas lado a lado (escritorio) / deslizables (movil) */}
@@ -192,7 +194,9 @@ export function ComparisonGrid({
           >
             <strong>No hay ningún sitio abierto en el comparador.</strong>
             <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "12px" }}>
-              Haz clic en cualquiera de los chips superiores (<code>+</code>), introduce una coordenada lunar personalizada o selecciona un punto en el Globo Lunar 3D para añadirlo.
+              {mode === "edu"
+                ? "Haz clic en cualquiera de los chips superiores (+) o selecciona un hito en el Globo Lunar 3D para añadirlo a la comparativa."
+                : "Haz clic en cualquiera de los chips superiores (+), introduce una coordenada lunar personalizada o selecciona un punto en el Globo Lunar 3D para añadirlo."}
             </p>
           </div>
         )}
