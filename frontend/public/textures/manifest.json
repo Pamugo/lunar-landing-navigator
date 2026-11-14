@@ -1,62 +1,62 @@
 {
-  "generated_at_utc": "2026-11-14T14:36:55Z",
-  "provenance": "NASA Scientific Visualization Studio (SVS #4720 CGI Moon Kit, LROC WAC + LOLA) + Local LOLA Polar GeoTIFF",
+  "generated_at_utc": "2026-11-14T14:51:06Z",
+  "provenance": "NASA Scientific Visualization Studio (SVS #4720 CGI Moon Kit, LROC WAC 4K + LOLA 16-bit) + NASA Moon Trek WMTS + Local LOLA Polar GeoTIFF",
   "textures": [
     {
       "filename": "moon_albedo_map.jpg",
       "description": "NASA LROC WAC Global Color/Albedo Mosaic 4K (4096x2048)",
       "width": 4096,
       "height": 2048,
-      "size_bytes": 1977726,
-      "sha256": "cdd40081d15a29a115aebfe34868e561a85243d0ea5b7e39bd6f16e5a3f58ce4"
+      "size_bytes": 4033702,
+      "sha256": "d8d29f44ad8f8a9780e478cf32af1461d5dba0064f3705d3cf66ba876cb7e2d0"
     },
     {
       "filename": "moon_bump_lola.jpg",
       "description": "NASA LOLA Global Altimetry/Bump Map 4K (4096x2048)",
       "width": 4096,
       "height": 2048,
-      "size_bytes": 1376736,
-      "sha256": "d119d1541cb78b773222eea99fa450411fa95e439b2ad38f6e48e0c300afb976"
+      "size_bytes": 2291718,
+      "sha256": "fbc31c7435467d41cddff332d4784ae66131471a3fe6a07c2f26f9eed9f61660"
     },
     {
       "filename": "moon_normal_lola.jpg",
       "description": "NASA LOLA Global Tangent-Space Normal Map 4K (4096x2048)",
       "width": 4096,
       "height": 2048,
-      "size_bytes": 1835828,
-      "sha256": "eb0294f2f8501f6920c56435772af2aa6dae4b367a615d8590493b7d979678b6"
+      "size_bytes": 3585900,
+      "sha256": "8013ecd61b569808de7a7738a53fe145bcfc3474db9fe253a01b44bb3f0b89cc"
     },
     {
       "filename": "south_pole_lola_hires.png",
-      "description": "LOLA South Polar Stereographic High-Res Albedo+Hillshade LOD (2048x2048)",
-      "width": 2048,
-      "height": 2048,
-      "size_bytes": 8272217,
-      "sha256": "704333cd80c9e8dc97fceb3022b1c5159c629e77c4351baea2f8bb24af9f0945"
+      "description": "LOLA South Polar Stereographic Ultra-HiRes 4K LOD (4096x4096)",
+      "width": 4096,
+      "height": 4096,
+      "size_bytes": 19217600,
+      "sha256": "9f9dc3666ca0791b7e70b93199aceac3ed8c00e67b19a01c53d7976d90748380"
     },
     {
       "filename": "south_pole_bump_hires.jpg",
-      "description": "LOLA South Polar Stereographic High-Res Elevation Map (2048x2048)",
-      "width": 2048,
-      "height": 2048,
-      "size_bytes": 290991,
-      "sha256": "4d6c7613bf941665e500b99a9b11fbf0ffe2175a9c61c6465d534914362543b2"
+      "description": "LOLA South Polar Stereographic High-Res Elevation Map (4096x4096)",
+      "width": 4096,
+      "height": 4096,
+      "size_bytes": 918938,
+      "sha256": "51e1b8641309c0aa9be0ecbfa066571ec0f46352bf9bd5a76a2b7e89c9f40173"
     },
     {
       "filename": "south_pole_normal_hires.jpg",
-      "description": "LOLA South Polar Stereographic High-Res Normal Map (2048x2048)",
-      "width": 2048,
-      "height": 2048,
-      "size_bytes": 688647,
-      "sha256": "acad54191417344e0e9df15b317d7f0266e46d2d66cb540fe44c78f723925190"
+      "description": "LOLA South Polar Stereographic High-Res Normal Map (4096x4096)",
+      "width": 4096,
+      "height": 4096,
+      "size_bytes": 1354940,
+      "sha256": "a12dfc1f68b4618671df60a79bb0f312a081d914a1314627c0dc53f4e73aea30"
     },
     {
       "filename": "regolith_micro_normal.png",
       "description": "Seamless High-Frequency Lunar Regolith Micro-Detail Normal Map (512x512)",
       "width": 512,
       "height": 512,
-      "size_bytes": 645342,
-      "sha256": "4244ff5a6c58926c6efc7d87817caf129e731ed8aa30a386623b740423d6392f"
+      "size_bytes": 712967,
+      "sha256": "50fb8a956051d914b9dd5fd7fcde4808e554e52d88397507c1cf066a88c54c1c"
     }
   ]
 }
