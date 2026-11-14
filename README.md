@@ -88,3 +88,20 @@ $env:Path = "C:\Program Files\nodejs;$env:Path"
 & "C:\Program Files\nodejs\npm.cmd" --prefix frontend test
 & "C:\Program Files\nodejs\npm.cmd" --prefix frontend run build
 ```
+
+---
+
+## Auto-Sincronización Continua con GitHub (`scripts/auto_sync_github.py`)
+
+Para vigilar automáticamente los cambios en el repositorio y ejecutar `git add -A` + `git commit` + `git push origin main` cada pocos minutos:
+
+```powershell
+# Modo watcher continuo (revisa y sube cambios cada 60 segundos por defecto)
+.\.venv\Scripts\python.exe scripts/auto_sync_github.py
+
+# Personalizar el intervalo (ej. cada 120 segundos)
+.\.venv\Scripts\python.exe scripts/auto_sync_github.py --interval 120
+
+# Ejecutar una única sincronización inmediata y salir
+.\.venv\Scripts\python.exe scripts/auto_sync_github.py --once
+```
