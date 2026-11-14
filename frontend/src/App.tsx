@@ -16,6 +16,7 @@ import type {
   ResolutionProfile,
   ScientificVerificationSeal,
   SiteSummaryMetrics,
+  SolarEnergySummary,
   TerrainPatch,
   TimeWindow,
   VisibilitySample,
@@ -199,6 +200,8 @@ export function App() {
 
   const [seriesByKey, setSeriesByKey] = useState<Record<string, VisibilityTimeSeries>>({});
   const [metricsByKey, setMetricsByKey] = useState<Record<string, SiteSummaryMetrics>>({});
+  const [solarEnergyByKey, setSolarEnergyByKey] = useState<Record<string, SolarEnergySummary>>({});
+  const [horizonByKey, setHorizonByKey] = useState<Record<string, HorizonProfile>>({});
   const [focusedHorizon, setFocusedHorizon] = useState<HorizonProfile | null>(null);
   const [focusedTerrain, setFocusedTerrain] = useState<TerrainPatch | null>(null);
 
@@ -245,6 +248,7 @@ export function App() {
     if (selectedSites.length === 0) {
       setMetricsByKey({});
       setSeriesByKey({});
+      setSolarEnergyByKey({});
       return;
     }
     const ctrl = new AbortController();
@@ -292,8 +296,60 @@ export function App() {
       setSeriesByKey(nextSeries);
     });
 
+    Promise.all(
+      selectedSites.map((site) =>
+        apiClient
+          .fetchSolarEnergy(
+            {
+              site,
+              window: timeWindow,
+              fixed_azimuth_deg: 0.0,
+              ephemeris: ephem,
+            },
+            ctrl.signal,
+          )
+          .then((summary) => ({ key: coordinateKey(site), summary }))
+          .catch(() => null),
+      ),
+    ).then((items) => {
+      const nextSolar: Record<string, SolarEnergySummary> = {};
+      for (const item of items) {
+        if (item) nextSolar[item.key] = item.summary;
+      }
+      setSolarEnergyByKey(nextSolar);
+    });
+
+    Promise.all(
+      selectedSites.map((site) =>
+        apiClient
+          .fetchHorizon(
+            {
+              site,
+              azimuth_step_deg: 0.5,
+              max_distance_km: 150.0,
+              dem_product: null,
+            },
+            ctrl.signal,
+          )
+          .then((profile) => ({ key: coordinateKey(site), profile }))
+          .catch(() => null),
+      ),
+    ).then((items) => {
+      const nextH: Record<string, HorizonProfile> = {};
+      for (const item of items) {
+        if (item) nextH[item.key] = item.profile;
+      }
+      setHorizonByKey(nextH);
+    });
+
     return () => ctrl.abort();
   }, [selectedSites, timeWindow]);
+
+  const handleChangeSiteHeight = (index: number, newHeight_m: number) => {
+    setSelectedSites((prev) =>
+      prev.map((coord, i) => (i === index ? { ...coord, observer_height_m: newHeight_m } : coord)),
+    );
+  };
 
   const defaultPreviewSite: LunarCoordinate = {
     lat_deg: -89.68,
@@ -606,7 +662,11 @@ export function App() {
             onRemoveSite={handleRemoveSite}
             onClearAllSites={handleClearAllSites}
             onAddCustomCoordinate={handleAddCustomCoordinate}
+            onChangeSiteHeight={handleChangeSiteHeight}
             metricsByKey={metricsByKey}
+            solarEnergyByKey={solarEnergyByKey}
+            seriesByKey={seriesByKey}
+            horizonByKey={horizonByKey}
             currentSampleByKey={currentSampleByKey}
             windowDays={windowDays}
             mode={mode}

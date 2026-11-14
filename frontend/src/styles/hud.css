@@ -742,3 +742,311 @@ body {
     height: 12px;
   }
 }
+
+/* ---------------- Solar Energy & Optimal Azimuth Module (RF-05, MATH_MODELS §5) ---------------- */
+.solar-energy-section {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.solar-energy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.solar-optimal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(16, 185, 129, 0.2));
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  font-weight: 700;
+  color: #FDE047;
+  font-size: 12px;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.18);
+}
+
+.solar-architectures-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.solar-arch-row {
+  background: rgba(11, 15, 25, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.solar-arch-row.optimal-highlight {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.solar-arch-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.solar-arch-title {
+  color: var(--text-secondary);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.solar-arch-values {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.solar-kwh-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: #F8FAFC;
+}
+
+.solar-efficiency-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.solar-efficiency-tag.gold {
+  background: rgba(245, 158, 11, 0.22);
+  color: #FDE047;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.solar-efficiency-tag.cyan {
+  background: rgba(6, 182, 212, 0.18);
+  color: #38BDF8;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+}
+
+.solar-efficiency-tag.slate {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94A3B8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.solar-slider-container {
+  background: rgba(11, 15, 25, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.solar-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.solar-azimuth-slider {
+  width: 100%;
+  accent-color: var(--solar-amber);
+  height: 5px;
+  cursor: pointer;
+}
+
+.solar-compass-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(11, 15, 25, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 8px 6px;
+}
+
+.solar-compass-svg {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  display: block;
+}
+
+.solar-compass-legend {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 0;
+  padding: 0 4px;
+}
+
+.solar-compass-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.solar-compass-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 9.5px;
+  color: var(--text-secondary);
+}
+
+/* ---------------- Mast Height Selector & Topographic Shadow (RF-05, RT-02) ---------------- */
+.mast-height-selector-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: rgba(11, 15, 25, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+
+.mast-height-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mast-height-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.mast-height-btn {
+  background: rgba(30, 41, 59, 0.75);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 4px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  transition: all 0.15s ease;
+}
+
+.mast-height-btn:hover {
+  background: rgba(51, 65, 85, 0.85);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.mast-height-btn.active {
+  background: rgba(11, 61, 145, 0.65);
+  color: #93C5FD;
+  border-color: var(--nasa-blue-accent);
+  box-shadow: 0 0 8px rgba(30, 98, 208, 0.35);
+}
+
+.mast-sublabel {
+  font-size: 8.5px;
+  font-weight: normal;
+  opacity: 0.85;
+}
+
+.solar-total-shadow-banner {
+  background: rgba(224, 60, 49, 0.14);
+  border: 1px solid rgba(224, 60, 49, 0.45);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mast-height-eng-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mast-height-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mast-number-input {
+  width: 90px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #F8FAFC;
+  font-family: var(--font-mono);
+}
+
+.mast-number-input:focus {
+  outline: none;
+  border-color: var(--nasa-blue-accent);
+  box-shadow: 0 0 0 1px var(--nasa-blue-accent);
+}
+
+.mast-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mast-chip-btn {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+}
+
+.mast-chip-btn:hover {
+  background: rgba(51, 65, 85, 0.85);
+  color: var(--text-secondary);
+}
+
+.mast-chip-btn.active {
+  background: rgba(11, 61, 145, 0.65);
+  border-color: var(--nasa-blue-accent);
+  color: #93C5FD;
+}
+
+
+
+
