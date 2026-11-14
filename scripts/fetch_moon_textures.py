@@ -195,12 +195,23 @@ def build_global_4k_textures() -> tuple[np.ndarray, np.ndarray]:
     out_w, out_h = 4096, 2048
     print("\n[1/3] Construyendo texturas globales 4K (4096x2048) NASA LROC WAC + LOLA DEM...")
 
+    # Si ya existen las texturas base de la NASA en frontend/public/textures/, copiarlas a cache como respaldo offline
+    existing_albedo = TEXTURES_DIR / "moon_albedo_map.jpg"
+    cached_2k_albedo = CACHE_DIR / "lroc_color_2k.jpg"
+    if existing_albedo.is_file() and existing_albedo.stat().st_size >= 100_000 and not cached_2k_albedo.is_file():
+        cached_2k_albedo.write_bytes(existing_albedo.read_bytes())
+
+    existing_bump = TEXTURES_DIR / "moon_bump_lola.jpg"
+    cached_2k_bump = CACHE_DIR / "ldem_3_8bit.jpg"
+    if existing_bump.is_file() and existing_bump.stat().st_size >= 50_000 and not cached_2k_bump.is_file():
+        cached_2k_bump.write_bytes(existing_bump.read_bytes())
+
     # 1. Albedo LROC WAC 4K
     albedo_src = CACHE_DIR / "lroc_color_poles_4k.tif"
     if not download_cached(RAW_SOURCES["lroc_4k_tif"], albedo_src, min_bytes=4_000_000):
         albedo_src = CACHE_DIR / "lroc_color_poles_2k.tif"
         if not download_cached(RAW_SOURCES["lroc_2k_tif"], albedo_src, min_bytes=1_000_000):
-            albedo_src = CACHE_DIR / "lroc_color_2k.jpg"
+            albedo_src = cached_2k_albedo
             download_cached(RAW_SOURCES["lroc_2k_jpg"], albedo_src, min_bytes=100_000)
 
     rgb_4k = load_resampled_rgb(albedo_src, out_h, out_w)
@@ -208,29 +219,41 @@ def build_global_4k_textures() -> tuple[np.ndarray, np.ndarray]:
     # 2. DEM LOLA global 16-bit (ldem_4_uint.tif o ldem_16_uint.tif)
     dem_src = CACHE_DIR / "ldem_4_uint.tif"
     if not download_cached(RAW_SOURCES["ldem_4_tif"], dem_src, min_bytes=500_000):
-        dem_src = CACHE_DIR / "ldem_3_8bit.jpg"
+        dem_src = cached_2k_bump
         download_cached(RAW_SOURCES["ldem_3_jpg"], dem_src, min_bytes=50_000)
 
     dem_4k = load_resampled_dem(dem_src, out_h, out_w)
 
-    # Realce de micro-contraste de crateres reales (Unsharp Mask sobre LOLA + LROC)
+    # Realce de micro-contraste de crateres reales (Unsharp Mask multiescala sobre LOLA + LROC)
     luma = 0.299 * rgb_4k[:, :, 0] + 0.587 * rgb_4k[:, :, 1] + 0.114 * rgb_4k[:, :, 2]
     luma_norm = luma / 255.0
-    high_freq_lroc = luma_norm - gaussian_filter(luma_norm, sigma=3.0)
-    high_freq_dem = dem_4k - gaussian_filter(dem_4k, sigma=4.0)
+    high_freq_lroc = (luma_norm - gaussian_filter(luma_norm, sigma=2.2)) + 0.6 * (
+        luma_norm - gaussian_filter(luma_norm, sigma=0.9)
+    )
+    high_freq_dem = (dem_4k - gaussian_filter(dem_4k, sigma=3.0)) + 0.5 * (
+        dem_4k - gaussian_filter(dem_4k, sigma=1.1)
+    )
+
+    # Micro-textura determinista de regolito 4K proporcional al gradiente local (bordes de crateres y tierras altas)
+    rng_4k = np.random.default_rng(20260401)
+    fine_grain = gaussian_filter(rng_4k.normal(0.0, 1.0, (out_h, out_w)).astype(np.float32), sigma=0.75)
 
     # Fusionar detalle fotogrametrico LROC de alta frecuencia en el mapa de alturas LOLA
-    bump_4k = np.clip(dem_4k + 0.35 * high_freq_dem + 0.18 * high_freq_lroc, 0.0, 1.0)
+    bump_4k = np.clip(dem_4k + 0.42 * high_freq_dem + 0.24 * high_freq_lroc + 0.015 * fine_grain, 0.0, 1.0)
 
     # Realzar nitidez del albedo 4K con micro-sombreado de pendiente LOLA
     gy, gx = np.gradient(bump_4k)
-    slope_shade = np.clip(1.0 + (gx * 1.4 - gy * 1.4), 0.78, 1.22)[:, :, None]
-    sharpened_rgb = np.clip((rgb_4k + 42.0 * high_freq_lroc[:, :, None]) * slope_shade, 0.0, 255.0).astype(np.uint8)
+    slope_shade = np.clip(1.0 + (gx * 2.2 - gy * 2.2), 0.72, 1.28)[:, :, None]
+    sharpened_rgb = np.clip(
+        (rgb_4k + 54.0 * high_freq_lroc[:, :, None] + 4.5 * fine_grain[:, :, None]) * slope_shade,
+        0.0,
+        255.0,
+    ).astype(np.uint8)
 
     write_jpeg_rgb(TEXTURES_DIR / "moon_albedo_map.jpg", sharpened_rgb, quality=93)
     write_jpeg_rgb(TEXTURES_DIR / "moon_bump_lola.jpg", (bump_4k * 255.0).astype(np.uint8), quality=93)
 
-    normal_4k = compute_normal_map_uint8(bump_4k, strength=6.5)
+    normal_4k = compute_normal_map_uint8(bump_4k, strength=7.5)
     write_jpeg_rgb(TEXTURES_DIR / "moon_normal_lola.jpg", normal_4k, quality=92)
 
     print("   [OK] moon_albedo_map.jpg, moon_bump_lola.jpg, moon_normal_lola.jpg generados a 4096x2048 px.")
