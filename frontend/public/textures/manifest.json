@@ -1,0 +1,20 @@
+{
+  "generated_at_utc": "2026-11-14T13:29:25Z",
+  "provenance": "NASA Scientific Visualization Studio (SVS #4720 CGI Moon Kit, LRO WAC + LOLA)",
+  "textures": [
+    {
+      "filename": "moon_albedo_map.jpg",
+      "description": "NASA LRO WAC Global Photographic Color/Albedo Mosaic (SVS #4720 CGI Moon Kit)",
+      "size_bytes": 457942,
+      "sha256": "f7130a1822681fa7512d7dcfd40db8c10b9ba4f06777910348698260ed7a2170",
+      "source": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_2k.jpg"
+    },
+    {
+      "filename": "moon_bump_lola.jpg",
+      "description": "NASA LRO LOLA Global Altimetry/Bump Elevation Map (SVS #4720 CGI Moon Kit)",
+      "size_bytes": 111552,
+      "sha256": "6d93f887e7d8bedfe35ab89ba785e5e3ca12381bd092a5e6abe2c707dda8bb98",
+      "source": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_3_8bit.jpg"
+    }
+  ]
+}
