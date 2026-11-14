@@ -14,18 +14,15 @@ export interface LunarGlobe3DProps {
   onOpenLocalTerrain3D?: () => void;
 }
 
-const R_MOON_M = 1_737_400.0;
-const POLAR_CAP_HALF_EXTENT_M = 340_000.0;
-
-// Parametros de Zoom Hibrido (Orbital + Teleobjetivo Optico FOV)
-const MIN_CAM_DIST = 1.004; // ~7 km sobre la superficie lunar (R = 1.0)
-const MAX_CAM_DIST = 4.5;
-const MIN_FOV_DEG = 5.0;    // Teleobjetivo ×9 sobre orbita baja
-const MAX_FOV_DEG = 45.0;   // Gran angular orbital
+// Limites calibrados para mantener la textura 8K/4K 100 % nitida antes del Auto-LOD a Terrain3D
+const MIN_CAM_DIST = 1.08;
+const MAX_CAM_DIST = 4.2;
+const MIN_FOV_DEG = 20.0;
+const MAX_FOV_DEG = 45.0;
 const CONSTANT_ZOOM_SPEED = 1.2;
 
-// Cache-buster para forzar al navegador a descargar las nuevas texturas 4K NASA SVS / Moon Trek
-const TEXTURE_CACHE_BUST = "v=20261114_nasa4k_v5";
+// Parametro obligatorio de cache-busting
+const TEXTURE_VERSION = "v=real_lroc_v3";
 
 /**
  * Convierte (lat_deg, lon_deg) selenograficos MOON_ME a coordenadas 3D en una esfera de radio R.
@@ -49,208 +46,6 @@ function vector3ToLatLon(point: THREE.Vector3): { lat_deg: number; lon_deg: numb
   };
 }
 
-/**
- * Construye la malla esferica de alta densidad para el Casquete Polar Sur (-78.5° a -90°)
- * con mapeo UV estereografico exacto para south_pole_lola_hires.png (4096x4096 px).
- */
-function createSouthPolarCapGeometry(
-  radius: number,
-  lonSegments: number,
-  latSegments: number,
-): THREE.BufferGeometry {
-  const latMinDeg = -90.0;
-  const latMaxDeg = -78.5;
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const uvs: number[] = [];
-  const indices: number[] = [];
-
-  for (let iy = 0; iy <= latSegments; iy++) {
-    const vFrac = iy / latSegments;
-    const latDeg = latMinDeg + vFrac * (latMaxDeg - latMinDeg);
-    const phi = (latDeg * Math.PI) / 180.0;
-    const rho = 2.0 * R_MOON_M * Math.tan(Math.PI / 4.0 + phi / 2.0);
-
-    for (let ix = 0; ix <= lonSegments; ix++) {
-      const uFrac = ix / lonSegments;
-      const lonDeg = -180.0 + uFrac * 360.0;
-      const lambda = (lonDeg * Math.PI) / 180.0;
-
-      const nx = Math.cos(phi) * Math.sin(lambda);
-      const ny = Math.sin(phi);
-      const nz = Math.cos(phi) * Math.cos(lambda);
-
-      positions.push(radius * nx, radius * ny, radius * nz);
-      normals.push(nx, ny, nz);
-
-      const x_m = rho * Math.sin(lambda);
-      const y_m = rho * Math.cos(lambda);
-      const u = (x_m + POLAR_CAP_HALF_EXTENT_M) / (2.0 * POLAR_CAP_HALF_EXTENT_M);
-      const v = (y_m + POLAR_CAP_HALF_EXTENT_M) / (2.0 * POLAR_CAP_HALF_EXTENT_M);
-      uvs.push(u, v);
-    }
-  }
-
-  const stride = lonSegments + 1;
-  for (let iy = 0; iy < latSegments; iy++) {
-    for (let ix = 0; ix < lonSegments; ix++) {
-      const a = iy * stride + ix;
-      const b = a + 1;
-      const c = (iy + 1) * stride + ix;
-      const d = c + 1;
-      indices.push(a, c, b);
-      indices.push(b, c, d);
-    }
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setIndex(indices);
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
-  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-  return geo;
-}
-
-/**
- * Inyecta un Shader WebGL Multi-Escala (3 octavas de crateres celulares 3D + grano de regolito basaltico
- * + realce de bordes en tiempo real) sobre MeshStandardMaterial para garantizar nitidez infinita
- * incluso a FOV = 5° y dist = 1.004 (~7 km de altitud).
- */
-function attachMultiScaleDetailShader(
-  material: THREE.MeshStandardMaterial,
-  detailUniforms: { uZoomLevel: { value: number } },
-  shaderKey: string,
-): void {
-  material.customProgramCacheKey = () => shaderKey;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uZoomLevel = detailUniforms.uZoomLevel;
-
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-varying vec3 vObjSpherePos;
-varying vec3 vCustomViewPos;`,
-      )
-      .replace(
-        "#include <begin_vertex>",
-        `#include <begin_vertex>
-vObjSpherePos = normalize(position);
-vCustomViewPos = (modelViewMatrix * vec4(transformed, 1.0)).xyz;`,
-      );
-
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-uniform float uZoomLevel;
-varying vec3 vObjSpherePos;
-varying vec3 vCustomViewPos;
-
-// Hash 3D sin costuras sobre la esfera lunar
-vec3 hash33Lunar(vec3 p3) {
-  p3 = fract(p3 * vec3(0.1031, 0.1030, 0.0973));
-  p3 += dot(p3, p3.yxz + 33.33);
-  return fract((p3.xxy + p3.yxx) * p3.zyx);
-}
-
-float noise3DLunar(vec3 p) {
-  vec3 i = floor(p);
-  vec3 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  float n000 = dot(hash33Lunar(i + vec3(0.0, 0.0, 0.0)), vec3(0.333));
-  float n100 = dot(hash33Lunar(i + vec3(1.0, 0.0, 0.0)), vec3(0.333));
-  float n010 = dot(hash33Lunar(i + vec3(0.0, 1.0, 0.0)), vec3(0.333));
-  float n110 = dot(hash33Lunar(i + vec3(1.0, 1.0, 0.0)), vec3(0.333));
-  float n001 = dot(hash33Lunar(i + vec3(0.0, 0.0, 1.0)), vec3(0.333));
-  float n101 = dot(hash33Lunar(i + vec3(1.0, 0.0, 1.0)), vec3(0.333));
-  float n011 = dot(hash33Lunar(i + vec3(0.0, 1.0, 1.0)), vec3(0.333));
-  float n111 = dot(hash33Lunar(i + vec3(1.0, 1.0, 1.0)), vec3(0.333));
-  float nx00 = mix(n000, n100, f.x);
-  float nx10 = mix(n010, n110, f.x);
-  float nx01 = mix(n001, n101, f.x);
-  float nx11 = mix(n011, n111, f.x);
-  float nxy0 = mix(nx00, nx10, f.y);
-  float nxy1 = mix(nx01, nx11, f.y);
-  return mix(nxy0, nxy1, f.z);
-}
-
-// Capa celular 3D de crateres de impacto con cavidad parabolica y anillo de eyecta elevado
-float craterOctave3D(vec3 p, float scale) {
-  vec3 sp = p * scale;
-  vec3 cell = floor(sp);
-  vec3 fracPos = fract(sp);
-  float minDist = 2.0;
-  for (int x = -1; x <= 1; x++) {
-    for (int y = -1; y <= 1; y++) {
-      for (int z = -1; z <= 1; z++) {
-        vec3 offset = vec3(float(x), float(y), float(z));
-        vec3 rnd = hash33Lunar(cell + offset);
-        vec3 center = offset + 0.15 + 0.70 * rnd;
-        float d = length(fracPos - center);
-        minDist = min(minDist, d);
-      }
-    }
-  }
-  float r = 0.42;
-  float bowl = smoothstep(0.0, r, minDist) - 1.0;
-  float rim = exp(-pow((minDist - r) / 0.085, 2.0)) * 0.42;
-  return bowl * 0.68 + rim;
-}
-
-// Evaluacion de 3 octavas de detalle topografico progresivas segun el nivel de zoom
-float evalMultiScaleLunarHeight(vec3 spherePos, float zoom) {
-  float w1 = smoothstep(0.08, 0.45, zoom);
-  float w2 = smoothstep(0.30, 0.75, zoom);
-  float w3 = smoothstep(0.55, 0.98, zoom);
-
-  float h = 0.0;
-  if (w1 > 0.001) {
-    h += w1 * 0.42 * craterOctave3D(spherePos, 110.0);
-    h += w1 * 0.22 * (noise3DLunar(spherePos * 260.0) - 0.5);
-  }
-  if (w2 > 0.001) {
-    h += w2 * 0.32 * craterOctave3D(spherePos, 480.0);
-    h += w2 * 0.18 * (noise3DLunar(spherePos * 1200.0) - 0.5);
-  }
-  if (w3 > 0.001) {
-    h += w3 * 0.24 * craterOctave3D(spherePos, 2100.0);
-    h += w3 * 0.15 * (noise3DLunar(spherePos * 6400.0) - 0.5);
-  }
-  return h;
-}`,
-      )
-      .replace(
-        "#include <map_fragment>",
-        `#include <map_fragment>
-// Realce de nitidez local y modulacion de albedo por micro-crateres 3D al hacer zoom
-float detailH = evalMultiScaleLunarHeight(vObjSpherePos, uZoomLevel);
-float contrastBoost = 1.0 + 0.38 * smoothstep(0.1, 0.9, uZoomLevel);
-diffuseColor.rgb = clamp((diffuseColor.rgb - 0.42) * contrastBoost + 0.42 + detailH * 0.11, 0.02, 0.98);`,
-      )
-      .replace(
-        "#include <normal_fragment_maps>",
-        `#include <normal_fragment_maps>
-// Perturbacion analitica de normales en espacio de vista (Mikkelsen screen-space surface gradient)
-if (uZoomLevel > 0.05) {
-  float hCenter = evalMultiScaleLunarHeight(vObjSpherePos, uZoomLevel);
-  float dHx = dFdx(hCenter);
-  float dHy = dFdy(hCenter);
-  vec3 dPdx = dFdx(vCustomViewPos);
-  vec3 dPdy = dFdy(vCustomViewPos);
-  vec3 r1 = cross(dPdy, normal);
-  vec3 r2 = cross(normal, dPdx);
-  float det = dot(dPdx, r1);
-  if (abs(det) > 1e-10) {
-    vec3 surfGrad = sign(det) * (dHx * r1 + dHy * r2);
-    float normStrength = mix(0.015, 0.065, uZoomLevel);
-    normal = normalize(abs(det) * normal - surfGrad * normStrength);
-  }
-}`,
-      );
-  };
-}
-
 export function LunarGlobe3D({
   sites,
   selectedSiteIds,
@@ -264,15 +59,16 @@ export function LunarGlobe3D({
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [cameraPreset, setCameraPreset] = useState<"south_pole" | "nearside" | "farside" | "site_zoom">("south_pole");
   const [showEduCard, setShowEduCard] = useState<boolean>(true);
-  const [altitudeKm, setAltitudeKm] = useState<number>(Math.round((1.75 - 1.0) * 1737.4));
+  const [altitudeKm, setAltitudeKm] = useState<number>(Math.round((1.85 - 1.0) * 1737.4));
   const [fovDeg, setFovDeg] = useState<number>(38.0);
-  const [zoomMagnification, setZoomMagnification] = useState<number>(1.8);
-  const [isDeepZoom, setIsDeepZoom] = useState<boolean>(false);
+  const [isLowOrbit, setIsLowOrbit] = useState<boolean>(false);
+  const [crossFadeOut, setCrossFadeOut] = useState<boolean>(false);
 
-  // Estado de camara hibrido: yaw, pitch, dist (orbital [1.004..4.5]) y fov (teleobjetivo [5°..45°])
-  const camStateRef = useRef({ yaw: 0.15, pitch: -1.42, dist: 1.75, fov: 38.0 });
-  const targetCamRef = useRef({ yaw: 0.15, pitch: -1.42, dist: 1.75, fov: 38.0 });
-  const detailUniformsRef = useRef({ uZoomLevel: { value: 0.25 } });
+  const camStateRef = useRef({ yaw: 0.15, pitch: -1.38, dist: 1.85, fov: 38.0 });
+  const targetCamRef = useRef({ yaw: 0.15, pitch: -1.38, dist: 1.85, fov: 38.0 });
+  const autoLodCounterRef = useRef<number>(0);
+  const onOpenLocalRef = useRef(onOpenLocalTerrain3D);
+  onOpenLocalRef.current = onOpenLocalTerrain3D;
 
   const markersRef = useRef<Map<string, THREE.Group>>(new Map());
   const focusReticleRef = useRef<THREE.Group | null>(null);
@@ -283,8 +79,16 @@ export function LunarGlobe3D({
   const modeRef = useRef(mode);
   modeRef.current = mode;
 
+  const triggerSmoothSurfaceTransition = () => {
+    if (!onOpenLocalRef.current) return;
+    setCrossFadeOut(true);
+    window.setTimeout(() => {
+      onOpenLocalRef.current?.();
+    }, 220);
+  };
+
   const flyToCoordinate = (lat_deg: number, lon_deg: number, targetDist?: number, targetFov?: number) => {
-    const targetPitch = Math.max(-1.5685, Math.min(1.5685, (lat_deg * Math.PI) / 180.0));
+    const targetPitch = Math.max(-1.568, Math.min(1.568, (lat_deg * Math.PI) / 180.0));
     const targetYaw = (lon_deg * Math.PI) / 180.0;
     const currentYaw = targetCamRef.current.yaw;
     let deltaYaw = ((targetYaw - currentYaw + Math.PI) % (2 * Math.PI)) - Math.PI;
@@ -300,10 +104,11 @@ export function LunarGlobe3D({
 
   const applyCameraPreset = (preset: "south_pole" | "nearside" | "farside" | "site_zoom") => {
     setCameraPreset(preset);
+    autoLodCounterRef.current = 0;
     if (preset === "south_pole") {
-      flyToCoordinate(-88.5, 0.0, 1.22, 32.0);
+      flyToCoordinate(-86.5, 0.0, 1.38, 34.0);
     } else if (preset === "site_zoom") {
-      flyToCoordinate(focusedSite.lat_deg, focusedSite.lon_deg, 1.035, 12.0);
+      flyToCoordinate(focusedSite.lat_deg, focusedSite.lon_deg, 1.12, 22.0);
     } else if (preset === "nearside") {
       flyToCoordinate(0.0, 0.0, 2.65, 40.0);
     } else {
@@ -311,24 +116,33 @@ export function LunarGlobe3D({
     }
   };
 
-  // Zoom Hibrido sin freno por altitud (velocidad constante CONSTANT_ZOOM_SPEED = 1.2)
-  const applyHybridZoomDelta = (wheelDeltaY: number) => {
+  // Zoom de velocidad constante (1.2) con Auto-LOD hacia la superficie 3D al superar el limite orbital
+  const applyZoomDelta = (wheelDeltaY: number) => {
     const cur = targetCamRef.current;
     if (wheelDeltaY < 0) {
-      // Zoom IN: acerca primero y simultaneamente reduce el FOV hasta 5° cuando esta cerca
+      // Si el usuario ya esta en el limite orbital inferior (altitude <= 0.09 y fov <= 21°) y sigue haciendo zoom in,
+      // realizar transicion automatica suave (Auto-LOD) hacia la malla topografica local 128x128 (Terrain3D.tsx)
+      if (cur.dist <= MIN_CAM_DIST + 0.015 && cur.fov <= MIN_FOV_DEG + 1.5) {
+        autoLodCounterRef.current += 1;
+        if (autoLodCounterRef.current >= 2) {
+          autoLodCounterRef.current = 0;
+          triggerSmoothSurfaceTransition();
+          return;
+        }
+      }
       const distStep = wheelDeltaY * 0.0018 * CONSTANT_ZOOM_SPEED;
       cur.dist = Math.max(MIN_CAM_DIST, cur.dist + distStep);
       if (cur.dist < 1.45) {
-        const fovStep = wheelDeltaY * 0.042 * CONSTANT_ZOOM_SPEED;
+        const fovStep = wheelDeltaY * 0.028 * CONSTANT_ZOOM_SPEED;
         cur.fov = Math.max(MIN_FOV_DEG, cur.fov + fovStep);
       }
     } else {
-      // Zoom OUT: abre primero el teleobjetivo FOV y aleja la orbita a velocidad constante
+      autoLodCounterRef.current = 0;
       if (cur.fov < 40.0) {
-        const fovStep = wheelDeltaY * 0.045 * CONSTANT_ZOOM_SPEED;
+        const fovStep = wheelDeltaY * 0.032 * CONSTANT_ZOOM_SPEED;
         cur.fov = Math.min(MAX_FOV_DEG, cur.fov + fovStep);
       }
-      if (cur.fov >= 22.0) {
+      if (cur.fov >= 26.0) {
         const distStep = wheelDeltaY * 0.0018 * CONSTANT_ZOOM_SPEED;
         cur.dist = Math.min(MAX_CAM_DIST, cur.dist + distStep);
       }
@@ -336,7 +150,15 @@ export function LunarGlobe3D({
   };
 
   const handleZoomButton = (direction: "in" | "out") => {
-    applyHybridZoomDelta(direction === "in" ? -160 : 160);
+    if (
+      direction === "in" &&
+      targetCamRef.current.dist <= MIN_CAM_DIST + 0.02 &&
+      targetCamRef.current.fov <= MIN_FOV_DEG + 1.5
+    ) {
+      triggerSmoothSurfaceTransition();
+      return;
+    }
+    applyZoomDelta(direction === "in" ? -160 : 160);
   };
 
   useEffect(() => {
@@ -347,8 +169,7 @@ export function LunarGlobe3D({
     const height = container.clientHeight || 380;
 
     const scene = new THREE.Scene();
-    // near = 0.0005, far = 100 para permitir acercamiento extremo (minDistance = 1.004) sin clipping
-    const camera = new THREE.PerspectiveCamera(38, width / height, 0.0005, 100);
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.005, 100);
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -359,6 +180,10 @@ export function LunarGlobe3D({
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.0));
     renderer.setSize(width, height);
+    // Mapeo tonal fotografico ACES Filmic de alto contraste espacial
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+
     container.innerHTML = "";
     container.appendChild(renderer.domElement);
 
@@ -375,34 +200,35 @@ export function LunarGlobe3D({
       tex.needsUpdate = true;
     };
 
-    // 1. Iluminacion astronomica real sin atmosfera (Airless Body)
-    const sunLight = new THREE.DirectionalLight(0xfff8ee, 3.3);
+    // 1. Iluminacion Espacial Realista sin Atmosfera (Alto Contraste: sombras profundas en crateres)
+    const sunLight = new THREE.DirectionalLight(0xfffcf5, 2.8);
     sunLight.position.set(10, 0, 0);
     scene.add(sunLight);
     sunLightRef.current = sunLight;
 
-    const earthshine = new THREE.HemisphereLight(0x1e293b, 0x030712, 0.22);
+    // Luz ambiental minima (0.06) para preservar el contraste real del terminador lunar
+    const earthshine = new THREE.HemisphereLight(0x1e293b, 0x020617, 0.06);
     scene.add(earthshine);
 
-    // 2. Texturas 4K con Cache-Busting explicito (?v=...)
+    // 2. Texturas 100 % Fotograficas Reales de NASA LROC WAC + LOLA 16-bit (?v=real_lroc_v3)
     const texLoader = new THREE.TextureLoader();
 
-    const moonAlbedo = texLoader.load(`/textures/moon_albedo_map.jpg?${TEXTURE_CACHE_BUST}`, () => {
+    const moonAlbedo = texLoader.load(`/textures/moon_albedo_map.jpg?${TEXTURE_VERSION}`, () => {
       configureTexture(moonAlbedo, true);
     });
     configureTexture(moonAlbedo, true);
 
-    const moonBump = texLoader.load(`/textures/moon_bump_lola.jpg?${TEXTURE_CACHE_BUST}`, () => {
+    const moonBump = texLoader.load(`/textures/moon_bump_lola.jpg?${TEXTURE_VERSION}`, () => {
       configureTexture(moonBump, false);
     });
     configureTexture(moonBump, false);
 
-    const moonNormal = texLoader.load(`/textures/moon_normal_lola.jpg?${TEXTURE_CACHE_BUST}`, () => {
+    const moonNormal = texLoader.load(`/textures/moon_normal_lola.jpg?${TEXTURE_VERSION}`, () => {
       configureTexture(moonNormal, false);
     });
     configureTexture(moonNormal, false);
 
-    // 3. Esfera Lunar Global de Alta Densidad (256x256) + Shader Multi-Escala de Detalle Infinito
+    // 3. Esfera Lunar Unica de Alta Densidad (256x256) sin mallas superpuestas ni ruido procedimental
     const isMobile = window.innerWidth < 768;
     const segments = isMobile ? 160 : 256;
     const moonGeo = new THREE.SphereGeometry(1.0, segments, segments);
@@ -411,57 +237,18 @@ export function LunarGlobe3D({
     const moonMat = new THREE.MeshStandardMaterial({
       map: moonAlbedo,
       bumpMap: moonBump,
-      bumpScale: 0.048,
+      bumpScale: 0.038,
       normalMap: moonNormal,
-      normalScale: new THREE.Vector2(0.65, 0.65),
-      roughness: 0.95,
+      normalScale: new THREE.Vector2(1.8, 1.8),
+      roughness: 0.92,
       metalness: 0.0,
     });
-    attachMultiScaleDetailShader(moonMat, detailUniformsRef.current, "lunar_global_multiscale_v5");
     const moonMesh = new THREE.Mesh(moonGeo, moonMat);
     scene.add(moonMesh);
 
-    // 4. Capa LOD Polar Sur de Ultra-Alta Resolucion (4096x4096 px) + Shader Multi-Escala
-    const southPoleAlbedo = texLoader.load(`/textures/south_pole_lola_hires.png?${TEXTURE_CACHE_BUST}`, () => {
-      configureTexture(southPoleAlbedo, true);
-    });
-    configureTexture(southPoleAlbedo, true);
-
-    const southPoleBump = texLoader.load(`/textures/south_pole_bump_hires.jpg?${TEXTURE_CACHE_BUST}`, () => {
-      configureTexture(southPoleBump, false);
-    });
-    configureTexture(southPoleBump, false);
-
-    const southPoleNormal = texLoader.load(`/textures/south_pole_normal_hires.jpg?${TEXTURE_CACHE_BUST}`, () => {
-      configureTexture(southPoleNormal, false);
-    });
-    configureTexture(southPoleNormal, false);
-
-    const polarCapGeo = createSouthPolarCapGeometry(1.0002, isMobile ? 128 : 220, isMobile ? 64 : 110);
-    const polarCapMat = new THREE.MeshStandardMaterial({
-      map: southPoleAlbedo,
-      bumpMap: southPoleBump,
-      bumpScale: 0.062,
-      normalMap: southPoleNormal,
-      normalScale: new THREE.Vector2(0.85, 0.85),
-      displacementMap: southPoleBump,
-      displacementScale: 0.0016,
-      displacementBias: -0.0008,
-      roughness: 0.95,
-      metalness: 0.0,
-      transparent: true,
-      depthWrite: true,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
-    });
-    attachMultiScaleDetailShader(polarCapMat, detailUniformsRef.current, "lunar_polar_multiscale_v5");
-    const polarCapMesh = new THREE.Mesh(polarCapGeo, polarCapMat);
-    scene.add(polarCapMesh);
-
-    // 5. Reticula de telemetria fina tipo NASA para el sitio enfocado
+    // 4. Reticula de telemetria fina tipo NASA para el sitio enfocado
     const reticleGroup = new THREE.Group();
-    const innerRingGeo = new THREE.RingGeometry(0.015, 0.018, 32);
+    const innerRingGeo = new THREE.RingGeometry(0.014, 0.017, 32);
     const reticleMat = new THREE.MeshBasicMaterial({
       color: 0xfbbf24,
       side: THREE.DoubleSide,
@@ -472,7 +259,7 @@ export function LunarGlobe3D({
     const innerRing = new THREE.Mesh(innerRingGeo, reticleMat);
     reticleGroup.add(innerRing);
 
-    const outerRingGeo = new THREE.RingGeometry(0.025, 0.027, 32);
+    const outerRingGeo = new THREE.RingGeometry(0.023, 0.025, 32);
     const outerRing = new THREE.Mesh(outerRingGeo, reticleMat);
     reticleGroup.add(outerRing);
 
@@ -483,14 +270,14 @@ export function LunarGlobe3D({
       depthTest: false,
     });
     const tickPoints = [
-      new THREE.Vector3(0, 0.018, 0),
-      new THREE.Vector3(0, 0.032, 0),
-      new THREE.Vector3(0, -0.018, 0),
-      new THREE.Vector3(0, -0.032, 0),
-      new THREE.Vector3(0.018, 0, 0),
-      new THREE.Vector3(0.032, 0, 0),
-      new THREE.Vector3(-0.018, 0, 0),
-      new THREE.Vector3(-0.032, 0, 0),
+      new THREE.Vector3(0, 0.017, 0),
+      new THREE.Vector3(0, 0.030, 0),
+      new THREE.Vector3(0, -0.017, 0),
+      new THREE.Vector3(0, -0.030, 0),
+      new THREE.Vector3(0.017, 0, 0),
+      new THREE.Vector3(0.030, 0, 0),
+      new THREE.Vector3(-0.017, 0, 0),
+      new THREE.Vector3(-0.030, 0, 0),
     ];
     const tickGeo = new THREE.BufferGeometry().setFromPoints(tickPoints);
     const tickLines = new THREE.LineSegments(tickGeo, tickMat);
@@ -499,29 +286,29 @@ export function LunarGlobe3D({
     scene.add(reticleGroup);
     focusReticleRef.current = reticleGroup;
 
-    // 6. Vectores 3D hacia el Sol (#F59E0B) y la Tierra (#06B6D4)
+    // 5. Vectores 3D hacia el Sol (#F59E0B) y la Tierra (#06B6D4)
     const sunArrow = new THREE.ArrowHelper(
       new THREE.Vector3(0, 1, 0),
       new THREE.Vector3(0, -1, 0),
-      0.42,
+      0.40,
       0xf59e0b,
-      0.07,
-      0.035,
+      0.065,
+      0.032,
     );
     const earthArrow = new THREE.ArrowHelper(
       new THREE.Vector3(0, 0, 1),
       new THREE.Vector3(0, -1, 0),
-      0.42,
+      0.40,
       0x06b6d4,
-      0.07,
-      0.035,
+      0.065,
+      0.032,
     );
     scene.add(sunArrow);
     scene.add(earthArrow);
     sunArrowRef.current = sunArrow;
     earthArrowRef.current = earthArrow;
 
-    // 7. Marcadores minimalistas de precision para los sitios curados
+    // 6. Marcadores minimalistas de precision para los sitios curados
     const markerMap = new Map<string, THREE.Group>();
     const raycastTargets: THREE.Mesh[] = [];
 
@@ -532,7 +319,7 @@ export function LunarGlobe3D({
       siteGroup.position.copy(pos);
       siteGroup.lookAt(pos.clone().multiplyScalar(2.0));
 
-      const dotGeo = new THREE.SphereGeometry(0.006, 12, 12);
+      const dotGeo = new THREE.SphereGeometry(0.0055, 12, 12);
       const dotMat = new THREE.MeshBasicMaterial({
         color: isPolar ? 0x38bdf8 : 0xfbbf24,
       });
@@ -541,7 +328,7 @@ export function LunarGlobe3D({
       siteGroup.add(dot);
       raycastTargets.push(dot);
 
-      const ringG = new THREE.RingGeometry(0.010, 0.0125, 24);
+      const ringG = new THREE.RingGeometry(0.0095, 0.012, 24);
       const ringM = new THREE.MeshBasicMaterial({
         color: isPolar ? 0x38bdf8 : 0xfbbf24,
         side: THREE.DoubleSide,
@@ -558,7 +345,7 @@ export function LunarGlobe3D({
     }
     markersRef.current = markerMap;
 
-    // 8. Capa Dinamica Modo Educativo: Rutas Historicas de Misiones + Zonas PSR
+    // 7. Capa Dinamica Modo Educativo: Rutas Historicas de Misiones + Zonas PSR
     const eduGroup = new THREE.Group();
     const chronologicalIds = [
       "apollo-11",
@@ -607,7 +394,7 @@ export function LunarGlobe3D({
     scene.add(eduGroup);
     eduGroupRef.current = eduGroup;
 
-    // 9. Control de Camara: rotateSpeed adaptativo (por altitud y FOV) + zoomSpeed CONSTANTE (sin freno)
+    // 8. Control de Camara: rotateSpeed proporcional a altitud y FOV; zoomSpeed CONSTANTE (1.2)
     let isDragging = false;
     let dragDistance = 0;
     let prevX = 0;
@@ -628,15 +415,14 @@ export function LunarGlobe3D({
       prevX = e.clientX;
       prevY = e.clientY;
 
-      // Reducir UNICAMENTE rotateSpeed al acercarse o usar teleobjetivo FOV para paneo preciso
-      const altitudeFactor = Math.max(0.08, Math.min(1.0, (camStateRef.current.dist - 1.0) * 1.4));
+      const altitudeFactor = Math.max(0.12, Math.min(1.0, (camStateRef.current.dist - 1.0) * 1.4));
       const fovFactor = camStateRef.current.fov / 42.0;
       const dynamicRotSpeed = 0.0065 * altitudeFactor * fovFactor;
 
       targetCamRef.current.yaw -= dx * dynamicRotSpeed;
       targetCamRef.current.pitch = Math.max(
-        -1.5685,
-        Math.min(1.5685, targetCamRef.current.pitch + dy * dynamicRotSpeed),
+        -1.568,
+        Math.min(1.568, targetCamRef.current.pitch + dy * dynamicRotSpeed),
       );
     };
     const onPointerUp = (e: PointerEvent) => {
@@ -671,7 +457,7 @@ export function LunarGlobe3D({
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      applyHybridZoomDelta(e.deltaY);
+      applyZoomDelta(e.deltaY);
     };
 
     dom.addEventListener("pointerdown", onPointerDown);
@@ -686,7 +472,6 @@ export function LunarGlobe3D({
     const animate = () => {
       animId = requestAnimationFrame(animate);
 
-      // Interpolacion amortiguada de yaw, pitch, dist y fov
       camStateRef.current.yaw += (targetCamRef.current.yaw - camStateRef.current.yaw) * dampingFactor;
       camStateRef.current.pitch += (targetCamRef.current.pitch - camStateRef.current.pitch) * dampingFactor;
       camStateRef.current.dist += (targetCamRef.current.dist - camStateRef.current.dist) * dampingFactor;
@@ -705,14 +490,8 @@ export function LunarGlobe3D({
         camera.updateProjectionMatrix();
       }
 
-      // Calcular factor de zoom combinado [0..1] para el Shader Multi-Escala de Detalle Infinito
-      const distProgress = 1.0 - Math.max(0.0, Math.min(1.0, (dist - MIN_CAM_DIST) / (2.2 - MIN_CAM_DIST)));
-      const fovProgress = 1.0 - Math.max(0.0, Math.min(1.0, (fov - MIN_FOV_DEG) / (MAX_FOV_DEG - MIN_FOV_DEG)));
-      const combinedZoom = Math.min(1.0, Math.max(distProgress * 0.65, 0.35 + fovProgress * 0.65));
-      detailUniformsRef.current.uZoomLevel.value = combinedZoom;
-
-      // Escalar marcadores y reticula con altitud y FOV para mantener tamano visual limpio en pantalla
-      const visualScale = Math.max(0.04, Math.min(1.0, (dist - 1.0) * (fov / 38.0) * 1.3));
+      // Escalar marcadores y reticula con altitud y FOV para mantener tamano visual limpio
+      const visualScale = Math.max(0.16, Math.min(1.0, (dist - 1.0) * (fov / 38.0) * 1.35));
       if (focusReticleRef.current) {
         focusReticleRef.current.scale.setScalar(visualScale);
       }
@@ -723,17 +502,15 @@ export function LunarGlobe3D({
         earthArrowRef.current.scale.setScalar(visualScale);
       }
       for (const group of markersRef.current.values()) {
-        group.scale.setScalar(Math.max(0.06, Math.min(1.2, visualScale * 1.15)));
+        group.scale.setScalar(Math.max(0.18, Math.min(1.2, visualScale * 1.15)));
       }
 
       frameCounter++;
       if (frameCounter % 6 === 0) {
-        const km = Math.max(7, Math.round((dist - 1.0) * 1737.4));
-        const mag = Number(((2.8 / Math.max(0.004, dist - 1.0)) * (42.0 / fov) * 0.12).toFixed(1));
+        const km = Math.max(135, Math.round((dist - 1.0) * 1737.4));
         setAltitudeKm(km);
-        setFovDeg(Number(fov.toFixed(1)));
-        setZoomMagnification(Math.max(1.0, mag));
-        setIsDeepZoom(dist < 1.25 || fov < 24.0);
+        setFovDeg(Number(fov.toFixed(0)));
+        setIsLowOrbit(dist - 1.0 < 0.20);
       }
 
       renderer.render(scene, camera);
@@ -759,14 +536,9 @@ export function LunarGlobe3D({
       window.removeEventListener("resize", onResize);
       moonGeo.dispose();
       moonMat.dispose();
-      polarCapGeo.dispose();
-      polarCapMat.dispose();
       moonAlbedo.dispose();
       moonBump.dispose();
       moonNormal.dispose();
-      southPoleAlbedo.dispose();
-      southPoleBump.dispose();
-      southPoleNormal.dispose();
       innerRingGeo.dispose();
       outerRingGeo.dispose();
       reticleMat.dispose();
@@ -778,9 +550,9 @@ export function LunarGlobe3D({
 
   // Fly-to suave automatico cuando cambia el sitio enfocado
   useEffect(() => {
-    const nextDist = Math.min(targetCamRef.current.dist, 1.18);
-    const nextFov = Math.min(targetCamRef.current.fov, 24.0);
-    flyToCoordinate(focusedSite.lat_deg, focusedSite.lon_deg, Math.max(1.03, nextDist), Math.max(8.0, nextFov));
+    const nextDist = Math.min(targetCamRef.current.dist, 1.32);
+    const nextFov = Math.min(targetCamRef.current.fov, 30.0);
+    flyToCoordinate(focusedSite.lat_deg, focusedSite.lon_deg, Math.max(MIN_CAM_DIST, nextDist), Math.max(MIN_FOV_DEG, nextFov));
   }, [focusedSite.lat_deg, focusedSite.lon_deg, focusedSite.site_id]);
 
   // Actualizar colores de marcadores, posicion de la reticula y orientacion de vectores astronomicos
@@ -861,15 +633,22 @@ export function LunarGlobe3D({
   const focusedCuratedSite = sites.find((s) => s.id === focusedSite.site_id) ?? null;
 
   return (
-    <div className="viewport-stage" aria-label="Globo Lunar 3D fotorrealista con Zoom Hibrido FOV y Shader Multi-Escala">
+    <div
+      className="viewport-stage"
+      aria-label="Globo Lunar 3D fotorrealista con fotografia real NASA LROC WAC y Auto-LOD a Terreno 3D"
+      style={{
+        opacity: crossFadeOut ? 0.08 : 1.0,
+        transition: "opacity 0.22s ease-out",
+      }}
+    >
       <div className="viewport-overlay-top">
         <div className="hud-pill mono-telemetry">
           <span>Foco:</span>
           <strong>
             {focusedSite.lat_deg.toFixed(3)}°, {focusedSite.lon_deg.toFixed(3)}°
           </strong>
-          <span>· Zoom ×{zoomMagnification.toFixed(1)}</span>
-          <span>(FOV {fovDeg.toFixed(0)}° · ~{altitudeKm.toLocaleString()} km)</span>
+          <span>· FOV {fovDeg}°</span>
+          <span>· Altitud: ~{altitudeKm.toLocaleString()} km</span>
         </div>
 
         <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
@@ -877,7 +656,7 @@ export function LunarGlobe3D({
             type="button"
             className="hud-btn-mini"
             onClick={() => handleZoomButton("in")}
-            title="Acercar cámara + Teleobjetivo FOV hasta 5° (~7 km)"
+            title="Acercar cámara (en órbita baja salta automáticamente a Superficie 3D LOLA)"
           >
             ＋ Zoom
           </button>
@@ -893,9 +672,9 @@ export function LunarGlobe3D({
             type="button"
             className={`hud-btn-mini ${cameraPreset === "site_zoom" ? "active" : ""}`}
             onClick={() => applyCameraPreset("site_zoom")}
-            title="Zoom Teleobjetivo directo sobre el cráter/sitio activo"
+            title="Volar a órbita baja sobre el sitio seleccionado"
           >
-            🔍 Zoom Cráter
+            Enfocar Sitio
           </button>
           <button
             type="button"
@@ -932,7 +711,7 @@ export function LunarGlobe3D({
 
       <div ref={mountRef} style={{ width: "100%", height: "100%" }} />
 
-      {/* Boton flotante directo a la Malla 3D Local cuando se hace Deep Zoom */}
+      {/* Boton y aviso de Auto-LOD hacia la Superficie 3D Local de Alta Resolucion (Terrain3D.tsx) */}
       {onOpenLocalTerrain3D && (
         <div
           style={{
@@ -946,25 +725,39 @@ export function LunarGlobe3D({
             gap: "6px",
           }}
         >
+          {isLowOrbit && (
+            <span
+              style={{
+                background: "rgba(15, 23, 42, 0.9)",
+                color: "#fbbf24",
+                border: "1px solid rgba(251, 191, 36, 0.45)",
+                borderRadius: "6px",
+                padding: "4px 8px",
+                fontSize: "0.68rem",
+              }}
+            >
+              Sigue haciendo Zoom In para descenso automático a Superficie 3D LOLA
+            </span>
+          )}
           <button
             type="button"
-            onClick={onOpenLocalTerrain3D}
+            onClick={triggerSmoothSurfaceTransition}
             style={{
-              background: isDeepZoom
+              background: isLowOrbit
                 ? "linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.95))"
                 : "rgba(15, 23, 42, 0.88)",
-              color: isDeepZoom ? "#0b0f19" : "#f8fafc",
-              border: isDeepZoom ? "1px solid #fbbf24" : "1px solid rgba(56, 189, 248, 0.45)",
+              color: isLowOrbit ? "#0b0f19" : "#f8fafc",
+              border: isLowOrbit ? "1px solid #fbbf24" : "1px solid rgba(56, 189, 248, 0.45)",
               borderRadius: "8px",
-              padding: isDeepZoom ? "8px 13px" : "6px 10px",
-              fontSize: isDeepZoom ? "0.76rem" : "0.71rem",
+              padding: isLowOrbit ? "8px 13px" : "6px 10px",
+              fontSize: isLowOrbit ? "0.76rem" : "0.71rem",
               fontWeight: 700,
               cursor: "pointer",
-              boxShadow: isDeepZoom ? "0 0 18px rgba(245, 158, 11, 0.55)" : "0 6px 16px rgba(0,0,0,0.45)",
+              boxShadow: isLowOrbit ? "0 0 18px rgba(245, 158, 11, 0.55)" : "0 6px 16px rgba(0,0,0,0.45)",
               transition: "all 0.2s ease",
             }}
           >
-            ⛰️ Explorar Superficie 3D Local (LOLA DEM 128×128) →
+            ⛰️ Descender a Superficie 3D Local (LOLA DEM 128×128) →
           </button>
         </div>
       )}
@@ -1016,12 +809,12 @@ export function LunarGlobe3D({
         <span className="hud-pill">
           <span style={{ color: "var(--solar-amber)" }}>● Vector Sol</span>
           <span style={{ color: "var(--dte-cyan)" }}>● Vector Tierra (DTE)</span>
-          <span style={{ color: "#a7f3d0" }}>● Shader Multi-Escala 4K Activo</span>
+          <span style={{ color: "#a7f3d0" }}>● Mosaico Fotográfico NASA LROC WAC + LOLA 16-bit</span>
         </span>
         <span className="hud-pill">
           {mode === "edu"
-            ? "Rueda o ＋/－ para Zoom Óptico (FOV 45°→5°) · Clic en un sitio vuela al cráter"
-            : "Zoom Híbrido (1.004 R + FOV 5°) · Clic fija coordenadas selenográficas MOON_ME"}
+            ? "Rueda para acercar (Auto-LOD a Superficie 3D) · Clic en un marcador vuela al sitio"
+            : "Zoom con transición automática a Terreno 3D LOLA · Clic fija coordenadas MOON_ME"}
         </span>
       </div>
     </div>
