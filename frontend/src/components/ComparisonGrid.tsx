@@ -16,6 +16,7 @@ export interface ComparisonGridProps {
   onFocusIndex: (idx: number) => void;
   onToggleCuratedSite: (site: CuratedSite) => void;
   onRemoveSite: (idx: number) => void;
+  onClearAllSites: () => void;
   onAddCustomCoordinate: (lat_deg: number, lon_deg: number) => void;
   metricsByKey: Record<string, SiteSummaryMetrics>;
   currentSampleByKey: Record<string, VisibilitySample | undefined>;
@@ -34,6 +35,7 @@ export function ComparisonGrid({
   onFocusIndex,
   onToggleCuratedSite,
   onRemoveSite,
+  onClearAllSites,
   onAddCustomCoordinate,
   metricsByKey,
   currentSampleByKey,
@@ -84,6 +86,21 @@ export function ComparisonGrid({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {selectedSites.length > 0 && (
+            <button
+              type="button"
+              className="hud-btn-mini"
+              style={{
+                padding: "4px 9px",
+                color: "var(--text-secondary)",
+                borderColor: "rgba(224, 60, 49, 0.45)",
+              }}
+              onClick={onClearAllSites}
+              title="Cerrar todos los sitios abiertos en el comparador"
+            >
+              ✕ Cerrar todos ({selectedSites.length})
+            </button>
+          )}
           <label htmlFor="sort-metrics-select" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
             Ordenar por:
           </label>
@@ -115,15 +132,13 @@ export function ComparisonGrid({
                 onClick={() => onToggleCuratedSite(site)}
                 title={
                   isSelected
-                    ? selectedSites.length > 1
-                      ? `Clic para quitar ${site.name} del comparador`
-                      : `${site.name} (debe quedar al menos 1 sitio activo)`
+                    ? `Clic para quitar ${site.name} del comparador`
                     : `Añadir ${site.name} (${site.lat_deg}°, ${site.lon_deg}°)`
                 }
               >
                 {isSelected ? "✓ " : "+ "}
                 {site.name.split("-")[0]?.split("(")[0]?.trim()}
-                {isSelected && selectedSites.length > 1 ? " ✕" : ""}
+                {isSelected ? " ✕" : ""}
               </button>
             );
           })}
@@ -162,6 +177,25 @@ export function ComparisonGrid({
 
       {/* Tarjetas comparativas lado a lado (escritorio) / deslizables (movil) */}
       <div className="comparison-cards-grid">
+        {indexedSites.length === 0 && (
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              padding: "28px 18px",
+              textAlign: "center",
+              borderRadius: "10px",
+              border: "1px dashed rgba(148, 163, 184, 0.25)",
+              background: "rgba(15, 23, 42, 0.45)",
+              color: "var(--text-secondary)",
+              fontSize: "13px",
+            }}
+          >
+            <strong>No hay ningún sitio abierto en el comparador.</strong>
+            <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "12px" }}>
+              Haz clic en cualquiera de los chips superiores (<code>+</code>), introduce una coordenada lunar personalizada o selecciona un punto en el Globo Lunar 3D para añadirlo.
+            </p>
+          </div>
+        )}
         {indexedSites.map(({ coord, index, key, metrics }) => {
           const curated = curatedSites.find((c) => c.id === coord.site_id);
           const sample = currentSampleByKey[key];
@@ -194,27 +228,25 @@ export function ComparisonGrid({
                   <span className="category-tag">
                     {curated ? curated.category.replace("_", " ") : "custom"}
                   </span>
-                  {selectedSites.length > 1 && (
-                    <button
-                      type="button"
-                      className="hud-btn-mini"
-                      style={{
-                        padding: "2px 7px",
-                        fontSize: "11px",
-                        lineHeight: 1.2,
-                        color: "var(--text-secondary)",
-                        borderColor: "rgba(255, 255, 255, 0.16)",
-                      }}
-                      title="Quitar este sitio del comparador"
-                      aria-label={`Quitar ${curated?.name ?? "sitio personalizado"} del comparador`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemoveSite(index);
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="hud-btn-mini"
+                    style={{
+                      padding: "2px 7px",
+                      fontSize: "11px",
+                      lineHeight: 1.2,
+                      color: "var(--text-secondary)",
+                      borderColor: "rgba(255, 255, 255, 0.16)",
+                    }}
+                    title="Quitar este sitio del comparador"
+                    aria-label={`Quitar ${curated?.name ?? "sitio personalizado"} del comparador`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveSite(index);
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
               </div>
 
