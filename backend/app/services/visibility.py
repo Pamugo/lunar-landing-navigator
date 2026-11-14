@@ -14,6 +14,7 @@ import numpy as np
 from scipy.optimize import brentq
 
 from app.models.schemas import (
+    AdvancedDteMetrics,
     BodyPosition,
     ComparisonRequest,
     ComparisonResult,
@@ -37,6 +38,10 @@ from app.services.horizon import compute_horizon_profile, interpolate_horizon_de
 
 SOLAR_CONSTANT_AM0_W_M2: float = 1368.0
 AU_KM: float = 149_597_870.7
+SPEED_OF_LIGHT_KM_S: float = 299_792.458
+FREQ_S_BAND_GHZ: float = 2.2
+FREQ_X_BAND_GHZ: float = 8.4
+FREQ_KA_BAND_GHZ: float = 32.0
 
 
 def _disk_visible_fraction_rad(elevation_rad: float, alpha_rad: float, horizon_rad: float) -> float:
@@ -223,11 +228,91 @@ def _longest_streak_hours(flags: Sequence[bool], step_hours: float) -> float:
     return round(best * step_hours, 2)
 
 
+def compute_advanced_dte_metrics(
+    series: VisibilityTimeSeries,
+    dte_elevation_mask_deg: float = 0.0,
+) -> AdvancedDteMetrics:
+    """Calcula metricas avanzadas de telecomunicaciones DTE (MATH_MODELS §6)."""
+    if not series.samples:
+        return AdvancedDteMetrics(
+            terrain_clearance_deg=0.0,
+            min_clearance_deg=0.0,
+            max_clearance_deg=0.0,
+            earth_azimuth_span_deg=0.0,
+            earth_elevation_span_deg=0.0,
+            libration_span_deg=0.0,
+            earth_distance_km=384400.0,
+            one_way_light_time_s=1.2822,
+            round_trip_time_s=2.5644,
+            fspl_s_band_db=210.99,
+            fspl_x_band_db=222.62,
+            fspl_ka_band_db=234.25,
+            longest_comms_blackout_hours=0.0,
+            simultaneous_sun_earth_hours=0.0,
+        )
+
+    # 1. Holgura topografica angular (instantanea al inicio, minima y maxima)
+    clearances = [s.earth.clearance_deg for s in series.samples]
+    terrain_clearance_deg = round(float(clearances[0]), 4)
+    min_clearance_deg = round(float(min(clearances)), 4)
+    max_clearance_deg = round(float(max(clearances)), 4)
+
+    # 2. Caja de libracion terrestre (MATH_MODELS §6.2)
+    azimuths = [s.earth.azimuth_deg for s in series.samples]
+    elevations = [s.earth.elevation_deg for s in series.samples]
+
+    az_rad = np.unwrap(np.radians(azimuths))
+    az_span = float(math.degrees(np.max(az_rad) - np.min(az_rad)))
+    el_span = float(max(elevations) - min(elevations))
+    mean_el = float(sum(elevations) / len(elevations))
+    libration_span = float(math.hypot(el_span, az_span * math.cos(math.radians(mean_el))))
+
+    # 3. Distancia Tierra-Luna y retardos de propagacion de luz (MATH_MODELS §6.3)
+    distances = [s.earth.distance_km for s in series.samples]
+    mean_dist_km = float(sum(distances) / len(distances))
+    one_way_s = mean_dist_km / SPEED_OF_LIGHT_KM_S
+    rtt_s = 2.0 * one_way_s
+
+    # 4. Perdida de propagacion en espacio libre FSPL ITU-R P.525-4 (MATH_MODELS §6.4)
+    # Formula: 20*log10(d_km) + 20*log10(f_ghz) + 92.45
+    log_d = math.log10(mean_dist_km)
+    fspl_s = 20.0 * log_d + 20.0 * math.log10(FREQ_S_BAND_GHZ) + 92.45
+    fspl_x = 20.0 * log_d + 20.0 * math.log10(FREQ_X_BAND_GHZ) + 92.45
+    fspl_ka = 20.0 * log_d + 20.0 * math.log10(FREQ_KA_BAND_GHZ) + 92.45
+
+    # 5. Blackout maximo y Horas netas simultaneas Sol+Tierra (MATH_MODELS §6.5)
+    step_hours = float(series.window.step_minutes) / 60.0
+    dte_flags = [s.earth.clearance_deg >= dte_elevation_mask_deg for s in series.samples]
+    sunlit_flags = [s.sun.visible_fraction > 0.0 for s in series.samples]
+    blackout_flags = [not f for f in dte_flags]
+    both_flags = [s_flag and d_flag for s_flag, d_flag in zip(sunlit_flags, dte_flags, strict=True)]
+
+    longest_blackout_hours = _longest_streak_hours(blackout_flags, step_hours)
+    simultaneous_hours = round(sum(1 for f in both_flags if f) * step_hours, 2)
+
+    return AdvancedDteMetrics(
+        terrain_clearance_deg=terrain_clearance_deg,
+        min_clearance_deg=min_clearance_deg,
+        max_clearance_deg=max_clearance_deg,
+        earth_azimuth_span_deg=round(az_span, 4),
+        earth_elevation_span_deg=round(el_span, 4),
+        libration_span_deg=round(libration_span, 4),
+        earth_distance_km=round(mean_dist_km, 1),
+        one_way_light_time_s=round(one_way_s, 4),
+        round_trip_time_s=round(rtt_s, 4),
+        fspl_s_band_db=round(fspl_s, 2),
+        fspl_x_band_db=round(fspl_x, 2),
+        fspl_ka_band_db=round(fspl_ka, 2),
+        longest_comms_blackout_hours=longest_blackout_hours,
+        simultaneous_sun_earth_hours=simultaneous_hours,
+    )
+
+
 def summarize_site_metrics(
     series: VisibilityTimeSeries,
     dte_elevation_mask_deg: float = 0.0,
 ) -> SiteSummaryMetrics:
-    """Agrega las metricas de iluminacion solar, visibilidad DTE y ventanas simultaneas Sol+Tierra."""
+    """Agrega las metricas de iluminacion solar, visibilidad DTE y telecomunicaciones avanzadas."""
     n = max(1, len(series.samples))
     step_hours = float(series.window.step_minutes) / 60.0
 
@@ -251,6 +336,8 @@ def summarize_site_metrics(
         EventPrediction(event=EventType.EARTHSET, time_utc=None, seconds_from_reference=None, beyond_window=True),
     )
 
+    advanced_dte = compute_advanced_dte_metrics(series, dte_elevation_mask_deg)
+
     return SiteSummaryMetrics(
         site=series.site,
         horizon_source=series.computation.horizon_source,
@@ -262,6 +349,7 @@ def summarize_site_metrics(
         mean_sun_elevation_deg=round(mean_sun_el, 4),
         next_sunset=next_sunset,
         next_earthset=next_earthset,
+        advanced_dte=advanced_dte,
     )
 
 

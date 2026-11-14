@@ -199,6 +199,24 @@ class VisibilityTimeSeries(_Strict):
     computation: ComputationInfo
 
 
+# --------------------------------------------------------------------------- telecomunicaciones DTE avanzadas (MATH_MODELS §6)
+class AdvancedDteMetrics(_Strict):
+    terrain_clearance_deg: float = Field(description="Margen angular instantaneo respecto al horizonte en la direccion de la Tierra [deg]")
+    min_clearance_deg: float = Field(description="Margen angular minimo respecto al horizonte durante la ventana [deg]")
+    max_clearance_deg: float = Field(description="Margen angular maximo respecto al horizonte durante la ventana [deg]")
+    earth_azimuth_span_deg: float = Field(description="Rango de variacion de acimut terrestre por libracion en la ventana [deg]")
+    earth_elevation_span_deg: float = Field(description="Rango de variacion de elevacion terrestre por libracion en la ventana [deg]")
+    libration_span_deg: float = Field(description="Rango angular total combinado de libracion [deg]")
+    earth_distance_km: float = Field(description="Distancia media Tierra-Luna durante la ventana [km]")
+    one_way_light_time_s: float = Field(description="Retardo de propagacion de luz en un sentido d / c [s]")
+    round_trip_time_s: float = Field(description="Tiempo de retardo de ida y vuelta (RTT) 2*d / c [s]")
+    fspl_s_band_db: float = Field(description="Perdida de propagacion en espacio libre en Banda S (2.2 GHz) [dB]")
+    fspl_x_band_db: float = Field(description="Perdida de propagacion en espacio libre en Banda X (8.4 GHz) [dB]")
+    fspl_ka_band_db: float = Field(description="Perdida de propagacion en espacio libre en Banda Ka (32.0 GHz) [dB]")
+    longest_comms_blackout_hours: float = Field(description="Duracion maxima continua de perdida de enlace DTE [horas]")
+    simultaneous_sun_earth_hours: float = Field(description="Horas netas de ventana simultanea con Sol y Tierra visibles [horas]")
+
+
 # --------------------------------------------------------------------------- comparacion
 class SiteSummaryMetrics(_Strict):
     site: LunarCoordinate
@@ -211,6 +229,7 @@ class SiteSummaryMetrics(_Strict):
     mean_sun_elevation_deg: float
     next_sunset: EventPrediction
     next_earthset: EventPrediction
+    advanced_dte: AdvancedDteMetrics
 
 
 class ComparisonRequest(_Strict):

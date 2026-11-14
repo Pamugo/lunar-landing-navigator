@@ -743,6 +743,187 @@ body {
   }
 }
 
+/* ---------------- Advanced DTE Telecom Module (RF-02, RF-05, MATH_MODELS §6) ---------------- */
+.advanced-dte-section {
+  background: rgba(8, 20, 36, 0.78);
+  border: 1px solid rgba(6, 182, 212, 0.32);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.advanced-dte-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.clearance-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  font-family: var(--font-mono);
+}
+
+.clearance-badge.clear {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #34D399;
+}
+
+.clearance-badge.blocked {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #F87171;
+}
+
+.dte-relay-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+
+.dte-telemetry-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.dte-telemetry-cell {
+  background: rgba(11, 15, 25, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dte-cell-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.dte-cell-val {
+  font-size: 11px;
+  color: #E2E8F0;
+  font-weight: 600;
+}
+
+.dte-telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.dte-grid-cell {
+  background: rgba(11, 15, 25, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  padding: 5px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: center;
+}
+
+.dte-grid-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.dte-grid-value {
+  font-size: 11px;
+  color: #38BDF8;
+  font-weight: 600;
+}
+
+.dte-fspl-row {
+  background: rgba(11, 15, 25, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dte-fspl-title {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.dte-fspl-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dte-fspl-chip {
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 2px 6px;
+  color: var(--text-secondary);
+}
+
+.dte-fspl-chip strong {
+  font-family: var(--font-mono);
+  color: #E2E8F0;
+}
+
+.dte-fspl-chip.highlight-x {
+  border-color: rgba(6, 182, 212, 0.4);
+  background: rgba(6, 182, 212, 0.1);
+}
+.dte-fspl-chip.highlight-x strong {
+  color: #38BDF8;
+}
+
+.dte-fspl-chip.highlight-ka {
+  border-color: rgba(168, 85, 247, 0.4);
+  background: rgba(168, 85, 247, 0.1);
+}
+.dte-fspl-chip.highlight-ka strong {
+  color: #C084FC;
+}
+
+.dte-window-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  padding-top: 2px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.dte-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dte-stat-label {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
 /* ---------------- Solar Energy & Optimal Azimuth Module (RF-05, MATH_MODELS §5) ---------------- */
 .solar-energy-section {
   background: rgba(15, 23, 42, 0.72);

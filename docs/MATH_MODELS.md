@@ -250,7 +250,89 @@ Este cálculo tiene en cuenta intrínsecamente:
 2. Los macizos y montañas que bloquean el Sol en determinados acimuts (donde $f(t_k) = 0$).
 3. Las variaciones de distancia Sol–Luna a lo largo de la órbita heliocéntrica.
 
-## 6. Tolerancias de validación
+## 6. Telecomunicaciones Direct-to-Earth (DTE) y Propagación en Espacio Libre
+
+Para evaluar los presupuestos de enlace de radiocomunicaciones y los requerimientos del sistema de apuntamiento de antenas en la superficie lunar (exclusivo para Modo Ingeniero, RF-02, RF-05, RT-01), se aplican los siguientes modelos:
+
+### 6.1 Margen Angular Topográfico (Terrain Clearance)
+
+El margen angular instantáneo respecto al relieve local en la dirección del centro del disco terrestre es:
+
+$$
+\Delta \theta_{\text{clearance}}(t) = e_\oplus(t) - e_{\text{horiz}}(A_\oplus(t)) \quad [^\circ]
+$$
+
+Donde $e_\oplus(t)$ es la elevación topocéntrica aparente de la Tierra y $e_{\text{horiz}}(A_\oplus(t))$ es la elevación del horizonte topográfico calculada por raycasting LOLA (o esfera de referencia) en el acimut terrestre instantáneo $A_\oplus(t)$.
+- $\Delta \theta_{\text{clearance}} \ge \delta_{\text{mask}}$: Enlace DTE activo con visión directa (LOS).
+- $\Delta \theta_{\text{clearance}} < \delta_{\text{mask}}$: Enlace bloqueado por el relieve o por debajo de la máscara de elevación operacional.
+
+Durante una ventana de misión se extraen el margen instantáneo $\Delta \theta(t_0)$, el margen mínimo $\min_k \Delta \theta(t_k)$ y el margen máximo $\max_k \Delta \theta(t_k)$.
+
+### 6.2 Caja de Libración Terrestre y Rango Angular
+
+Debido a la excentricidad orbital lunar y la inclinación del eje de rotación respecto a la eclíptica (libración en longitud $\pm 7.9^\circ$, en latitud $\pm 6.7^\circ$), la Tierra no permanece estacionaria en el cielo de un observador selenográfico, sino que describe un ciclo oscilatorio aparente de 27.21 días (mes dracónico / anomálico):
+
+$$
+\Delta A_\oplus = \max_k A_\oplus(t_k) - \min_k A_\oplus(t_k) \quad [^\circ]
+$$
+$$
+\Delta e_\oplus = \max_k e_\oplus(t_k) - \min_k e_\oplus(t_k) \quad [^\circ]
+$$
+
+El rango total de variación angular aparente subtendido en la esfera celeste (para dimensionar el ancho de haz de media potencia HPBW de una antena fija o el rango de carrera de un gimbal de 2 ejes) se calcula como la distancia geodésica o hipotenusa proyectada:
+
+$$
+\theta_{\text{libration}} = \sqrt{(\Delta e_\oplus)^2 + \big(\Delta A_\oplus \cdot \cos\bar{e}_\oplus\big)^2} \quad [^\circ]
+$$
+
+Donde $\bar{e}_\oplus = \frac{1}{N}\sum_{k=1}^N e_\oplus(t_k)$ es la elevación media de la Tierra.
+
+### 6.3 Retardo de Propagación de Señal (Light-Time)
+
+Para una distancia topocéntrica instantánea o media Tierra–Luna $d_\oplus(t)$ [km] proporcionada por el kernel de efemérides DE421:
+
+- **Tiempo de propagación en un sentido (One-Way Light Time, OWLT):**
+  $$
+  \tau_{\text{OWLT}} = \frac{d_\oplus}{c} \quad [\text{s}] \qquad (c = 299\,792.458\text{ km/s})
+  $$
+  Para $d_\oplus \in [363\,000, 405\,000]\text{ km}$, $\tau_{\text{OWLT}} \approx 1.21\text{ s} - 1.35\text{ s}$ ($\sim 1.282\text{ s}$ nominal).
+
+- **Tiempo de retardo de ida y vuelta (Round-Trip Time, RTT):**
+  $$
+  \text{RTT} = 2 \cdot \tau_{\text{OWLT}} = \frac{2 d_\oplus}{c} \quad [\text{s}] \qquad (\sim 2.565\text{ s}\text{ nominal})
+  $$
+
+### 6.4 Pérdida de Propagación en el Espacio Libre (Free-Space Path Loss, FSPL)
+
+De acuerdo con la norma ITU-R P.525-4 para un enlace de radiocomunicación espacial en campo lejano:
+
+$$
+\text{FSPL} = \left(\frac{4\pi d_\oplus}{\lambda}\right)^2 = \left(\frac{4\pi d_\oplus f}{c}\right)^2
+$$
+
+En escala logarítmica decibélica (dB), con distancia $d_{\text{km}}$ en kilómetros y frecuencia portadora $f_{\text{GHz}}$ en gigahercios:
+
+$$
+\text{FSPL}(\text{dB}) = 20 \log_{10}(d_{\text{km}}) + 20 \log_{10}(f_{\text{GHz}}) + 20 \log_{10}\left(\frac{4\pi \cdot 10^{12}}{c_{\text{m/s}}}\right)
+$$
+$$
+\text{FSPL}(\text{dB}) = 20 \log_{10}(d_{\text{km}}) + 20 \log_{10}(f_{\text{GHz}}) + 92.45
+$$
+
+Frecuencias de enlace espacial lunar aplicadas:
+1. **Banda S ($f = 2.2\text{ GHz}$):** Comunicaciones de telemetría de ingeniería, comando (TT&C) y enlaces EVA de astronautas:
+   $$\text{FSPL}_S \approx 20 \log_{10}(384400) + 20 \log_{10}(2.2) + 92.45 \approx 211.0\text{ dB}$$
+2. **Banda X ($f = 8.4\text{ GHz}$):** Enlace primario de ciencia y telemetría de alta tasa (ej. VIPER, CLPS landers, DSN Deep Space Network):
+   $$\text{FSPL}_X \approx 20 \log_{10}(384400) + 20 \log_{10}(8.4) + 92.45 \approx 222.6\text{ dB}$$
+3. **Banda Ka ($f = 32.0\text{ GHz}$):** Transmisión de retorno de banda ancha y vídeo ultra-HD para Artemis y cargas de alta capacidad:
+   $$\text{FSPL}_{Ka} \approx 20 \log_{10}(384400) + 20 \log_{10}(32.0) + 92.45 \approx 234.3\text{ dB}$$
+
+### 6.5 Métricas de Interrupción y Ventana Dorada (Simultaneidad Sol + DTE)
+
+- **Duración máxima de corte de comunicaciones (`longest_comms_blackout_hours`):** Racha continua más prolongada con pérdida de línea de visión DTE ($\Delta \theta_{\text{clearance}} < \delta_{\text{mask}}$). Si es $0.0\text{ h}$, el enlace es 100% continuo e ininterrumpido.
+- **Horas de Ventana Dorada (`simultaneous_sun_earth_hours`):** Suma neta de horas donde $f_{\text{sunlit}}(t) > 0$ (generación fotovoltaica activa) y $\Delta \theta_{\text{clearance}}(t) \ge \delta_{\text{mask}}$ (enlace de telemetría a Tierra directo disponible), maximizando las operaciones científicas y de telepresencia robótica.
+
+## 7. Tolerancias de validación
 
 | Magnitud | Referencia | Objetivo | Aceptación |
 |----------|-----------|----------|-----------|

@@ -155,6 +155,23 @@ export interface VisibilityTimeSeries {
   computation: ComputationInfo;
 }
 
+export interface AdvancedDteMetrics {
+  terrain_clearance_deg: number;
+  min_clearance_deg: number;
+  max_clearance_deg: number;
+  earth_azimuth_span_deg: number;
+  earth_elevation_span_deg: number;
+  libration_span_deg: number;
+  earth_distance_km: number;
+  one_way_light_time_s: number;
+  round_trip_time_s: number;
+  fspl_s_band_db: number;
+  fspl_x_band_db: number;
+  fspl_ka_band_db: number;
+  longest_comms_blackout_hours: number;
+  simultaneous_sun_earth_hours: number;
+}
+
 export interface SiteSummaryMetrics {
   site: LunarCoordinate;
   horizon_source: HorizonSource;
@@ -166,6 +183,7 @@ export interface SiteSummaryMetrics {
   mean_sun_elevation_deg: number;
   next_sunset: EventPrediction;
   next_earthset: EventPrediction;
+  advanced_dte: AdvancedDteMetrics;
 }
 
 export interface ComparisonRequest {

@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import (
+    AdvancedDteMetrics,
     ComparisonRequest,
     ComparisonResult,
     CuratedSite,
@@ -26,6 +27,7 @@ from app.services.horizon import compute_horizon_profile
 from app.services.terrain import extract_terrain_patch, load_curated_sites, load_hardware_profiles
 from app.services.visibility import (
     compare_sites,
+    compute_advanced_dte_metrics,
     compute_solar_energy_analysis,
     compute_visibility_timeseries,
 )
@@ -89,3 +91,12 @@ def post_solar_energy(req: SolarEnergyRequest) -> SolarEnergySummary:
     )
     series = compute_visibility_timeseries(vis_req)
     return compute_solar_energy_analysis(series, fixed_azimuth_deg=req.fixed_azimuth_deg)
+
+
+@router.post("/dte-analysis", response_model=AdvancedDteMetrics)
+def post_dte_analysis(req: VisibilityRequest) -> AdvancedDteMetrics:
+    """Calcula metricas avanzadas de telecomunicaciones DTE, margen topografico y perdidas FSPL (RF-05, MATH_MODELS §6)."""
+    if req.window.end_utc <= req.window.start_utc:
+        raise HTTPException(status_code=422, detail="end_utc debe ser posterior a start_utc")
+    series = compute_visibility_timeseries(req)
+    return compute_advanced_dte_metrics(series, dte_elevation_mask_deg=req.dte_elevation_mask_deg)

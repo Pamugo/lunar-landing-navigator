@@ -897,6 +897,129 @@ export function ComparisonGrid({
                       {metrics.horizon_source === "spherical_analytical" ? "Esférico" : "LOLA DEM"}
                     </span>
                   </div>
+
+                  {/* Panel Tecnico de Telecomunicaciones DTE Avanzadas (Exclusivo Modo Ingeniero, RF-02, RF-05, RT-01) */}
+                  {mode === "eng" && metrics.advanced_dte && (() => {
+                    const dte = metrics.advanced_dte;
+                    const currentClearance = sample ? sample.earth.clearance_deg : dte.terrain_clearance_deg;
+                    const currentAz = sample ? sample.earth.azimuth_deg : 0.0;
+                    const currentEl = sample ? sample.earth.elevation_deg : 0.0;
+                    const isZeroDte = metrics.dte_fraction === 0.0 || dte.max_clearance_deg < -0.1;
+
+                    return (
+                      <div className="advanced-dte-section" onClick={(e) => e.stopPropagation()}>
+                        <div className="advanced-dte-header">
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ fontSize: "13px" }}>📡</span>
+                            <strong style={{ fontSize: "11px", color: "var(--dte-cyan-bright)", letterSpacing: "0.5px" }}>
+                              TELECOMUNICACIONES DTE & ENLACE TIERRA (BANDA X / Ka)
+                            </strong>
+                          </div>
+                          <span
+                            className={`clearance-badge ${currentClearance >= 0 ? "clear" : "blocked"}`}
+                            title={`Margen angular sobre el relieve lunar: ${currentClearance >= 0 ? "+" : ""}${currentClearance.toFixed(2)}°`}
+                          >
+                            {currentClearance >= 0 ? "✓ DESPEJADO" : "⚠ BLOQUEADO"} ({currentClearance >= 0 ? "+" : ""}{currentClearance.toFixed(2)}°)
+                          </span>
+                        </div>
+
+                        {isZeroDte ? (
+                          <div className="dte-relay-alert">
+                            <span style={{ fontSize: "15px" }}>🛰️</span>
+                            <div>
+                              <strong style={{ color: "#F87171", fontSize: "11px" }}>Sin visión directa a la Tierra (DTE 0.0%)</strong>
+                              <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "var(--text-secondary)", lineHeight: 1.3 }}>
+                                Sin visión directa: requiere satélite relé orbital lunar (ej. Lunar Gateway, Queqiao, Moonlight ESA).
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Fila 1: Apuntamiento de Antena y Caja de Libracion Terrestre */}
+                            <div className="dte-telemetry-row">
+                              <div className="dte-telemetry-cell">
+                                <span className="dte-cell-label">Apuntamiento Antena (Az / El)</span>
+                                <span className="mono-telemetry dte-cell-val">
+                                  Az {currentAz.toFixed(1)}° · El {currentEl >= 0 ? "+" : ""}{currentEl.toFixed(2)}°
+                                </span>
+                              </div>
+                              <div className="dte-telemetry-cell">
+                                <span className="dte-cell-label">Caja de Libración Terrestre</span>
+                                <span
+                                  className="mono-telemetry dte-cell-val"
+                                  title="Oscilación angular de la Tierra vista desde la superficie lunar en la ventana de misión"
+                                >
+                                  ±{(dte.earth_azimuth_span_deg / 2).toFixed(1)}° Az · ±{(dte.earth_elevation_span_deg / 2).toFixed(1)}° El (Span {dte.libration_span_deg.toFixed(1)}°)
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Fila 2: Distancia, Latencia (OWLT / RTT) y Holgura Topográfica min/max */}
+                            <div className="dte-telemetry-grid">
+                              <div className="dte-grid-cell">
+                                <span className="dte-grid-label">Distancia Tierra</span>
+                                <span className="mono-telemetry dte-grid-value">
+                                  {dte.earth_distance_km.toLocaleString("en-US", { maximumFractionDigits: 0 })} km
+                                </span>
+                              </div>
+                              <div className="dte-grid-cell">
+                                <span className="dte-grid-label">Latencia (OWLT / RTT)</span>
+                                <span
+                                  className="mono-telemetry dte-grid-value"
+                                  title={`Tiempo de luz en un sentido: ${dte.one_way_light_time_s.toFixed(3)} s · Tiempo de ida y vuelta: ${dte.round_trip_time_s.toFixed(3)} s`}
+                                >
+                                  {dte.one_way_light_time_s.toFixed(2)}s / {dte.round_trip_time_s.toFixed(2)}s
+                                </span>
+                              </div>
+                              <div className="dte-grid-cell">
+                                <span className="dte-grid-label">Holgura Mín / Máx</span>
+                                <span className="mono-telemetry dte-grid-value">
+                                  {dte.min_clearance_deg >= 0 ? "+" : ""}{dte.min_clearance_deg.toFixed(1)}° / +{dte.max_clearance_deg.toFixed(1)}°
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Fila 3: Perdidas FSPL ITU-R P.525-4 (Bandas S, X y Ka) */}
+                            <div className="dte-fspl-row">
+                              <span className="dte-fspl-title">Pérdidas Espacio Libre (FSPL):</span>
+                              <div className="dte-fspl-chips">
+                                <span className="dte-fspl-chip" title="Banda S (2.2 GHz) - Enlace de comandos y telemetría de ingeniería">
+                                  Banda S (2.2G): <strong>{dte.fspl_s_band_db.toFixed(1)} dB</strong>
+                                </span>
+                                <span className="dte-fspl-chip highlight-x" title="Banda X (8.4 GHz) - Enlace científico primario NASA DSN">
+                                  Banda X (8.4G): <strong>{dte.fspl_x_band_db.toFixed(1)} dB</strong>
+                                </span>
+                                <span className="dte-fspl-chip highlight-ka" title="Banda Ka (32.0 GHz) - Banda ancha y video HD lunar">
+                                  Banda Ka (32G): <strong>{dte.fspl_ka_band_db.toFixed(1)} dB</strong>
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Fila 4: Corte maximo continuo (Blackout) y Horas de Ventana Dorada */}
+                            <div className="dte-window-stats">
+                              <div className="dte-stat-item">
+                                <span className="dte-stat-label">Blackout DTE máx. continuo:</span>
+                                <strong
+                                  className="mono-telemetry"
+                                  style={{ color: dte.longest_comms_blackout_hours > 0 ? "#F87171" : "#34D399" }}
+                                >
+                                  {dte.longest_comms_blackout_hours > 0
+                                    ? `${dte.longest_comms_blackout_hours.toFixed(1)} h`
+                                    : "0.0 h (100% continuo)"}
+                                </strong>
+                              </div>
+                              <div className="dte-stat-item">
+                                <span className="dte-stat-label">Ventana Dorada (Sol + DTE):</span>
+                                <strong className="mono-telemetry" style={{ color: "#34D399" }}>
+                                  {dte.simultaneous_sun_earth_hours.toFixed(1)} h netas
+                                </strong>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
 

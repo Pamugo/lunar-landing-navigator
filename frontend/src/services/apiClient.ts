@@ -4,6 +4,7 @@
  * Regla: Cero calculos astronomicos en el cliente; toda la fisica proviene del backend.
  */
 import type {
+  AdvancedDteMetrics,
   ComparisonRequest,
   ComparisonResult,
   CuratedSite,
@@ -110,6 +111,13 @@ export const apiClient = {
 
   fetchSolarEnergy: (payload: SolarEnergyRequest, signal?: AbortSignal): Promise<SolarEnergySummary> =>
     request<SolarEnergySummary>("/solar-energy", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      ...(signal ? { signal } : {}),
+    }),
+
+  fetchDteAnalysis: (payload: VisibilityRequest, signal?: AbortSignal): Promise<AdvancedDteMetrics> =>
+    request<AdvancedDteMetrics>("/dte-analysis", {
       method: "POST",
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {}),

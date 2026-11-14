@@ -16,6 +16,7 @@ from app.api.routes import (
     list_curated_sites,
     list_hardware_profiles,
     post_compare,
+    post_dte_analysis,
     post_horizon,
     post_terrain_patch,
     post_visibility,
@@ -124,6 +125,12 @@ class TestFastApiEndpoints(unittest.TestCase):
         )
         cmp_body = post_compare(cmp_req).model_dump(mode="json")
         self.assertEqual(len(cmp_body["metrics"]), 2)
+        self.assertIn("advanced_dte", cmp_body["metrics"][0])
+        self.assertIn("fspl_x_band_db", cmp_body["metrics"][0]["advanced_dte"])
+
+        dte_body = post_dte_analysis(vis_req).model_dump(mode="json")
+        self.assertIn("fspl_ka_band_db", dte_body)
+        self.assertGreater(dte_body["fspl_ka_band_db"], dte_body["fspl_x_band_db"])
 
         bad_window = TimeWindow(
             start_utc=datetime(2027, 1, 5, 0, 0, tzinfo=UTC),

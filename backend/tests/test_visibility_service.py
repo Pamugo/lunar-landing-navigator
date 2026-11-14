@@ -80,6 +80,46 @@ class TestVisibilityAndComparisonService(unittest.TestCase):
         # Cabeus Crater (fondo PSR rodeado de paredes altas) tiene mucha menos luz solar que Shackleton Rim
         self.assertLess(by_id["cabeus-crater"].sunlit_fraction, by_id["shackleton-rim"].sunlit_fraction)
 
+        # Verificacion de Telecomunicaciones DTE Avanzadas (MATH_MODELS §6)
+        malapert_dte = by_id["malapert-massif"].advanced_dte
+        self.assertGreater(malapert_dte.earth_distance_km, 360000.0)
+        self.assertLess(malapert_dte.earth_distance_km, 410000.0)
+        self.assertAlmostEqual(malapert_dte.round_trip_time_s, 2.0 * malapert_dte.one_way_light_time_s, places=3)
+        self.assertGreaterEqual(malapert_dte.one_way_light_time_s, 1.20)
+        self.assertLessEqual(malapert_dte.one_way_light_time_s, 1.40)
+
+        # Perdidas de propagacion FSPL ITU-R P.525-4
+        self.assertGreater(malapert_dte.fspl_s_band_db, 209.0)
+        self.assertLess(malapert_dte.fspl_s_band_db, 213.0)
+        self.assertGreater(malapert_dte.fspl_x_band_db, 221.0)
+        self.assertLess(malapert_dte.fspl_x_band_db, 225.0)
+        self.assertGreater(malapert_dte.fspl_ka_band_db, 232.0)
+        self.assertLess(malapert_dte.fspl_ka_band_db, 236.0)
+        self.assertLess(malapert_dte.fspl_s_band_db, malapert_dte.fspl_x_band_db)
+        self.assertLess(malapert_dte.fspl_x_band_db, malapert_dte.fspl_ka_band_db)
+
+        # Chang'e 4 (cara oculta): holgura topografica negativa y blackout total
+        change4_dte = by_id["change-4"].advanced_dte
+        self.assertLess(change4_dte.terrain_clearance_deg, 0.0)
+        self.assertLess(change4_dte.max_clearance_deg, 0.0)
+        self.assertEqual(change4_dte.simultaneous_sun_earth_hours, 0.0)
+        self.assertGreater(change4_dte.longest_comms_blackout_hours, 600.0)
+
+    def test_mast_height_improves_dte_terrain_clearance(self) -> None:
+        """Comprueba que elevar el mastil de 0.5 m a 10.0 m incrementa la holgura angular sobre el relieve."""
+        window = TimeWindow(
+            start_utc=datetime(2027, 1, 1, 0, 0, tzinfo=UTC),
+            end_utc=datetime(2027, 1, 3, 0, 0, tzinfo=UTC),
+            step_minutes=60.0,
+        )
+        site_low = LunarCoordinate(lat_deg=-89.68, lon_deg=-166.0, observer_height_m=0.5, site_id="shackleton-rim")
+        site_high = LunarCoordinate(lat_deg=-89.68, lon_deg=-166.0, observer_height_m=10.0, site_id="shackleton-rim")
+
+        res = compare_sites(ComparisonRequest(sites=[site_low, site_high], window=window))
+        clearance_low = res.metrics[0].advanced_dte.terrain_clearance_deg
+        clearance_high = res.metrics[1].advanced_dte.terrain_clearance_deg
+        self.assertGreater(clearance_high, clearance_low, msg="Elevar el mastil debe aumentar la holgura DTE")
+
 
 if __name__ == "__main__":
     unittest.main()
