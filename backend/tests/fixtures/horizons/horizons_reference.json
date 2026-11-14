@@ -1,0 +1,616 @@
+{
+  "oracle": "NASA/JPL Horizons System API (https://ssd.jpl.nasa.gov/api/horizons.api)",
+  "generated_at_utc": "2026-11-14T09:57:21Z",
+  "parameters": {
+    "CENTER": "coord@301 (Lunar body-fixed frame)",
+    "APPARENT": "AIRLESS (no atmospheric refraction, light-time + stellar aberration enabled)",
+    "QUANTITIES": "4 (apparent Az/El), 20 (observer range)"
+  },
+  "sites": [
+    {
+      "site_id": "shackleton-rim",
+      "name": "Shackleton Rim",
+      "lat_deg": -89.68,
+      "lon_deg": -166.0,
+      "elevation_m": 2120.0,
+      "bodies": {
+        "sun": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 69.121264,
+            "elevation_deg": 1.127972,
+            "distance_km": 147010220.16467866
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 66.080046,
+            "elevation_deg": 1.139601,
+            "distance_km": 146990527.91102824
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 63.038415,
+            "elevation_deg": 1.150935,
+            "distance_km": 146971187.54441842
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 59.996378,
+            "elevation_deg": 1.161924,
+            "distance_km": 146952244.2798691
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 56.953946,
+            "elevation_deg": 1.172519,
+            "distance_km": 146933741.69852075
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 53.91113,
+            "elevation_deg": 1.182671,
+            "distance_km": 146915721.74027252
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 50.867941,
+            "elevation_deg": 1.192334,
+            "distance_km": 146898224.6991942
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 47.824391,
+            "elevation_deg": 1.201461,
+            "distance_km": 146881289.22067782
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 44.780493,
+            "elevation_deg": 1.21001,
+            "distance_km": 146864952.29948094
+          }
+        ],
+        "earth": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 173.181459,
+            "elevation_deg": -6.566131,
+            "distance_km": 391732.69835121476
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 173.046879,
+            "elevation_deg": -6.72471,
+            "distance_km": 392960.9630427839
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 172.895733,
+            "elevation_deg": -6.863948,
+            "distance_km": 394139.4930859867
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 172.728907,
+            "elevation_deg": -6.983766,
+            "distance_km": 395266.4800445236
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 172.547268,
+            "elevation_deg": -7.084129,
+            "distance_km": 396340.4887542139
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 172.351658,
+            "elevation_deg": -7.165042,
+            "distance_km": 397360.4350658249
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 172.142894,
+            "elevation_deg": -7.226546,
+            "distance_km": 398325.56212932116
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 171.921768,
+            "elevation_deg": -7.268719,
+            "distance_km": 399235.4154020444
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 171.68904,
+            "elevation_deg": -7.291672,
+            "distance_km": 400089.816769778
+          }
+        ]
+      }
+    },
+    {
+      "site_id": "malapert-massif",
+      "name": "Malapert Massif",
+      "lat_deg": -86.0,
+      "lon_deg": 2.7,
+      "elevation_m": 4650.0,
+      "bodies": {
+        "sun": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 260.368798,
+            "elevation_deg": 0.346037,
+            "distance_km": 147010243.87408614
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 257.335538,
+            "elevation_deg": 0.133864,
+            "distance_km": 146990558.4245598
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 254.301728,
+            "elevation_deg": -0.075806,
+            "distance_km": 146971224.7771039
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 251.2673,
+            "elevation_deg": -0.282402,
+            "distance_km": 146952288.12774703
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 248.232191,
+            "elevation_deg": -0.485359,
+            "distance_km": 146933792.0389268
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 245.196342,
+            "elevation_deg": -0.684123,
+            "distance_km": 146915778.4321688
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 242.159702,
+            "elevation_deg": -0.878153,
+            "distance_km": 146898287.58355373
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 239.122226,
+            "elevation_deg": -1.066918,
+            "distance_km": 146881358.12092724
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 236.083875,
+            "elevation_deg": -1.249901,
+            "distance_km": 146865027.0219972
+          }
+        ],
+        "earth": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 4.463715,
+            "elevation_deg": -2.262416,
+            "distance_km": 391602.4854384231
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 4.329134,
+            "elevation_deg": -2.420412,
+            "distance_km": 392830.766449624
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 4.178226,
+            "elevation_deg": -2.55901,
+            "distance_km": 394009.30788021674
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 4.011871,
+            "elevation_deg": -2.678147,
+            "distance_km": 395136.30136870063
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 3.830923,
+            "elevation_deg": -2.777801,
+            "distance_km": 396210.3118660855
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 3.636213,
+            "elevation_deg": -2.857991,
+            "distance_km": 397230.2554146238
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 3.428542,
+            "elevation_deg": -2.918771,
+            "distance_km": 398195.375387181
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 3.208682,
+            "elevation_deg": -2.960231,
+            "distance_km": 399105.217513367
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 2.977375,
+            "elevation_deg": -2.982497,
+            "distance_km": 399959.6040006003
+          }
+        ]
+      }
+    },
+    {
+      "site_id": "mons-mouton-leibnitz-beta",
+      "name": "Mons Mouton (IM-2 Athena)",
+      "lat_deg": -84.7906,
+      "lon_deg": 29.1957,
+      "elevation_m": 5321.0,
+      "bodies": {
+        "sun": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 233.95817,
+            "elevation_deg": -2.053959,
+            "distance_km": 147010316.85459805
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 230.923542,
+            "elevation_deg": -2.276883,
+            "distance_km": 146990631.7301673
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 227.887385,
+            "elevation_deg": -2.490549,
+            "distance_km": 146971298.20145324
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 224.849676,
+            "elevation_deg": -2.694365,
+            "distance_km": 146952361.46406996
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 221.810407,
+            "elevation_deg": -2.887769,
+            "distance_km": 146933865.08062124
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 218.769584,
+            "elevation_deg": -3.070227,
+            "distance_km": 146915850.97338808
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 215.72723,
+            "elevation_deg": -3.241233,
+            "distance_km": 146898359.41979152
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 212.683381,
+            "elevation_deg": -3.400314,
+            "distance_km": 146881429.0495981
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 209.63809,
+            "elevation_deg": -3.54703,
+            "distance_km": 146865096.84300658
+          }
+        ],
+        "earth": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 338.111741,
+            "elevation_deg": -1.418185,
+            "distance_km": 391576.8394116956
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 337.983598,
+            "elevation_deg": -1.58138,
+            "distance_km": 392805.28282335296
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 337.838393,
+            "elevation_deg": -1.72584,
+            "distance_km": 393984.0064880879
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 337.676997,
+            "elevation_deg": -1.851469,
+            "distance_km": 395111.2009747749
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 337.500265,
+            "elevation_deg": -1.958214,
+            "distance_km": 396185.4302186542
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 337.309022,
+            "elevation_deg": -2.046062,
+            "distance_km": 397205.60926715255
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 337.104071,
+            "elevation_deg": -2.115039,
+            "distance_km": 398170.98055366066
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 336.886181,
+            "elevation_deg": -2.165205,
+            "distance_km": 399081.0889221691
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 336.656096,
+            "elevation_deg": -2.196658,
+            "distance_km": 399935.7557273885
+          }
+        ]
+      }
+    },
+    {
+      "site_id": "apollo-11",
+      "name": "Apollo 11 - Tranquility Base",
+      "lat_deg": 0.67409,
+      "lon_deg": 23.47298,
+      "elevation_m": -1900.0,
+      "bodies": {
+        "sun": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 269.219006,
+            "elevation_deg": -30.364142,
+            "distance_km": 147011131.54038498
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 269.234049,
+            "elevation_deg": -33.40474,
+            "distance_km": 146991517.8399362
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 269.246562,
+            "elevation_deg": -36.445746,
+            "distance_km": 146972253.33770972
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 269.256344,
+            "elevation_deg": -39.487151,
+            "distance_km": 146953383.03311455
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 269.263115,
+            "elevation_deg": -42.528941,
+            "distance_km": 146934950.29975405
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 269.26649,
+            "elevation_deg": -45.571105,
+            "distance_km": 146916996.87865937
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 269.265948,
+            "elevation_deg": -48.613629,
+            "distance_km": 146899562.8742806
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 269.260778,
+            "elevation_deg": -51.656498,
+            "distance_km": 146882686.75220057
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 269.249998,
+            "elevation_deg": -54.699697,
+            "distance_km": 146866405.33770043
+          }
+        ],
+        "earth": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 288.478931,
+            "elevation_deg": 72.822315,
+            "distance_km": 389879.0201204798
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 288.855741,
+            "elevation_deg": 72.645995,
+            "distance_km": 391104.0727737275
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 289.1469,
+            "elevation_deg": 72.4594,
+            "distance_km": 392280.0855739515
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 289.355275,
+            "elevation_deg": 72.263746,
+            "distance_km": 393405.2436536397
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 289.484017,
+            "elevation_deg": 72.0601,
+            "distance_km": 394478.1051885143
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 289.536467,
+            "elevation_deg": 71.849396,
+            "distance_km": 395497.5792016957
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 289.516091,
+            "elevation_deg": 71.632433,
+            "distance_km": 396462.90186141594
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 289.426413,
+            "elevation_deg": 71.409888,
+            "distance_km": 397373.61155502143
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 289.270976,
+            "elevation_deg": 71.182321,
+            "distance_km": 398229.5229935813
+          }
+        ]
+      }
+    },
+    {
+      "site_id": "change-4",
+      "name": "Chang'e 4 (Farside Control)",
+      "lat_deg": -45.4446,
+      "lon_deg": 177.5991,
+      "elevation_m": -5925.0,
+      "bodies": {
+        "sun": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 87.51435,
+            "elevation_deg": 3.86706,
+            "distance_km": 147010137.75409594
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 85.332739,
+            "elevation_deg": 5.993515,
+            "distance_km": 146990381.83273318
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 83.135844,
+            "elevation_deg": 8.113653,
+            "distance_km": 146970978.2271705
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 80.917454,
+            "elevation_deg": 10.224262,
+            "distance_km": 146951972.3308322
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 78.671228,
+            "elevation_deg": 12.322026,
+            "distance_km": 146933407.9016715
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 76.390667,
+            "elevation_deg": 14.403488,
+            "distance_km": 146915327.05430585
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 74.069093,
+            "elevation_deg": 16.465018,
+            "distance_km": 146897770.25491595
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 71.69963,
+            "elevation_deg": 18.50278,
+            "distance_km": 146880776.3179155
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 69.275197,
+            "elevation_deg": 20.512695,
+            "distance_km": 146864382.40350977
+          }
+        ],
+        "earth": [
+          {
+            "time_utc": "2027-01-01T00:00:00Z",
+            "azimuth_deg": 194.830942,
+            "elevation_deg": -49.843654,
+            "distance_km": 392859.47050067317
+          },
+          {
+            "time_utc": "2027-01-01T06:00:00Z",
+            "azimuth_deg": 194.671771,
+            "elevation_deg": -50.02349,
+            "distance_km": 394086.45290960564
+          },
+          {
+            "time_utc": "2027-01-01T12:00:00Z",
+            "azimuth_deg": 194.480979,
+            "elevation_deg": -50.187045,
+            "distance_km": 395263.9563104931
+          },
+          {
+            "time_utc": "2027-01-01T18:00:00Z",
+            "azimuth_deg": 194.259763,
+            "elevation_deg": -50.333953,
+            "distance_km": 396390.17025793664
+          },
+          {
+            "time_utc": "2027-01-02T00:00:00Z",
+            "azimuth_deg": 194.009381,
+            "elevation_deg": -50.463878,
+            "distance_km": 397463.65673791606
+          },
+          {
+            "time_utc": "2027-01-02T06:00:00Z",
+            "azimuth_deg": 193.731141,
+            "elevation_deg": -50.576519,
+            "distance_km": 398483.32801384176
+          },
+          {
+            "time_utc": "2027-01-02T12:00:00Z",
+            "azimuth_deg": 193.426393,
+            "elevation_deg": -50.671609,
+            "distance_km": 399448.4229212758
+          },
+          {
+            "time_utc": "2027-01-02T18:00:00Z",
+            "azimuth_deg": 193.096526,
+            "elevation_deg": -50.748915,
+            "distance_km": 400358.4819733501
+          },
+          {
+            "time_utc": "2027-01-03T00:00:00Z",
+            "azimuth_deg": 192.742956,
+            "elevation_deg": -50.808243,
+            "distance_km": 401213.32150277507
+          }
+        ]
+      }
+    }
+  ]
+}
