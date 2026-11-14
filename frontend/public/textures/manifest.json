@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-11-14T15:00:32Z",
+  "generated_at_utc": "2026-11-14T15:03:56Z",
   "version_tag": "real_lroc_v3",
   "provenance": "NASA Moon Trek WMTS (LRO_WAC_Mosaic_Global_303ppd_v02) + NASA SVS #4720 (lroc_color_poles_4k.tif, ldem_16_uint.tif)",
   "textures": [
@@ -8,9 +8,9 @@
       "description": "Pure Photographic NASA LROC WAC Global Mosaic (Moon Trek WMTS + SVS 4K/8K)",
       "width": 8192,
       "height": 4096,
-      "size_bytes": 9029937,
-      "size_mb": 8.61,
-      "sha256": "6d927a02560dcf2e112a1b5fd73476a1a1aecd609a12fb4bfe315b5855d15ba9"
+      "size_bytes": 15598504,
+      "size_mb": 14.88,
+      "sha256": "c66308474ab5662a7774db6a4c69a647352bd3bf896cfb351b7e0d21d5462690"
     },
     {
       "filename": "moon_bump_lola.jpg",
