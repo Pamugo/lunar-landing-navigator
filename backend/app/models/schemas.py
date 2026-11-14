@@ -242,6 +242,43 @@ class ScientificVerificationSeal(_Strict):
     verified_at_utc: str
 
 
+# --------------------------------------------------------------------------- energia solar y acimut (MATH_MODELS §5)
+class _SolarArchitectureEnergy(_Strict):
+    architecture: str = Field(description="horizontal_panel | tracking_vertical_panel | fixed_vertical_panel")
+    azimuth_deg: float | None = Field(default=None, description="Acimut fijo del panel [0, 360) deg; null para tracking o horizontal")
+    total_energy_kwh_m2: float = Field(ge=0.0, description="Energia total acumulada [kWh/m^2]")
+    peak_flux_w_m2: float = Field(ge=0.0, description="Flujo de potencia pico instantanea [W/m^2]")
+    mean_flux_w_m2: float = Field(ge=0.0, description="Flujo de potencia medio durante la ventana [W/m^2]")
+
+
+class _OptimalAzimuthResult(_Strict):
+    optimal_panel_azimuth_deg: float = Field(ge=0.0, lt=360.0, description="Acimut optimo para panel vertical fijo [0, 359] deg")
+    optimal_fixed_energy_kwh_m2: float = Field(ge=0.0, description="Energia acumulada maxima lograda con el acimut optimo [kWh/m^2]")
+    azimuth_energy_curve_kwh_m2: list[float] = Field(description="Curva de energia para cada uno de los 360 grados de acimut [kWh/m^2]")
+
+
+class _SolarEnergySummary(_Strict):
+    solar_constant_am0_w_m2: float = Field(default=1368.0, description="Constante solar AM0 a 1 UA [W/m^2]")
+    mean_solar_distance_au: float = Field(gt=0.0, description="Distancia media heliocentrica durante la ventana [UA]")
+    horizontal_panel: _SolarArchitectureEnergy
+    tracking_vertical_panel: _SolarArchitectureEnergy
+    fixed_vertical_panel: _SolarArchitectureEnergy
+    optimal_azimuth: _OptimalAzimuthResult
+
+
+class _SolarEnergyRequest(_Strict):
+    site: LunarCoordinate
+    window: TimeWindow
+    fixed_azimuth_deg: float = Field(default=0.0, ge=0.0, lt=360.0, description="Acimut del panel vertical fijo a evaluar [0, 360) deg")
+    ephemeris: EphemerisKernel = EphemerisKernel.DE421
+
+
+SolarArchitectureEnergy = _SolarArchitectureEnergy
+OptimalAzimuthResult = _OptimalAzimuthResult
+SolarEnergySummary = _SolarEnergySummary
+SolarEnergyRequest = _SolarEnergyRequest
+
+
 class HealthResponse(_Strict):
     status: str
     contract_version: str

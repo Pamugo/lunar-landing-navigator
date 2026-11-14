@@ -22,7 +22,10 @@ from app.models.schemas import (
     EventType,
     HorizonProfile,
     HorizonRequest,
+    OptimalAzimuthResult,
     SiteSummaryMetrics,
+    SolarArchitectureEnergy,
+    SolarEnergySummary,
     TimeWindow,
     VisibilityRequest,
     VisibilitySample,
@@ -31,6 +34,9 @@ from app.models.schemas import (
 )
 from app.services.ephemeris import EphemerisSampleDict, compute_body_ephemeris
 from app.services.horizon import compute_horizon_profile, interpolate_horizon_deg
+
+SOLAR_CONSTANT_AM0_W_M2: float = 1368.0
+AU_KM: float = 149_597_870.7
 
 
 def _disk_visible_fraction_rad(elevation_rad: float, alpha_rad: float, horizon_rad: float) -> float:
@@ -281,3 +287,138 @@ def compare_sites(req: ComparisonRequest) -> ComparisonResult:
         metrics=metrics_list,
         computation=last_comp,
     )
+
+
+# --------------------------------------------------------------------------- Modelado de Energia Solar (MATH_MODELS §5)
+
+
+def compute_solar_irradiance_am0(distance_km: float, visible_fraction: float) -> float:
+    """Calcula la irradiancia espacial solar AM0 ajustada por distancia heliocentrica (MATH_MODELS §5.1).
+
+    Formula: S(t) = (1368.0 / d_au^2) * visible_fraction [W/m^2]
+    """
+    if visible_fraction <= 0.0 or distance_km <= 0.0:
+        return 0.0
+    dist_au = distance_km / AU_KM
+    flux = (SOLAR_CONSTANT_AM0_W_M2 / (dist_au**2)) * visible_fraction
+    return max(0.0, float(flux))
+
+
+def compute_solar_energy_analysis(
+    series: VisibilityTimeSeries,
+    fixed_azimuth_deg: float = 0.0,
+) -> SolarEnergySummary:
+    """Calcula potencia instantanea, energia acumulada y buscador de acimut optimo (MATH_MODELS §5).
+
+    Evalua 3 arquitecturas:
+      1. horizontal_panel: plano en superficie (proporcional a sin(elevacion)).
+      2. tracking_vertical_panel: vertical con seguimiento en acimut (proporcional a cos(elevacion)).
+      3. fixed_vertical_panel: vertical fijo con efecto coseno (cos(elevacion) * max(0, cos(az_sol - az_panel))).
+    Y el buscador automatico de acimut optimo evaluando los 360 grados discretos [0°, 359°].
+    """
+    n = len(series.samples)
+    step_hours = float(series.window.step_minutes) / 60.0
+
+    if n == 0:
+        empty_arch = SolarArchitectureEnergy(
+            architecture="horizontal_panel",
+            azimuth_deg=None,
+            total_energy_kwh_m2=0.0,
+            peak_flux_w_m2=0.0,
+            mean_flux_w_m2=0.0,
+        )
+        return SolarEnergySummary(
+            solar_constant_am0_w_m2=SOLAR_CONSTANT_AM0_W_M2,
+            mean_solar_distance_au=1.0,
+            horizontal_panel=empty_arch,
+            tracking_vertical_panel=empty_arch.model_copy(update={"architecture": "tracking_vertical_panel"}),
+            fixed_vertical_panel=empty_arch.model_copy(
+                update={"architecture": "fixed_vertical_panel", "azimuth_deg": round(fixed_azimuth_deg % 360.0, 2)}
+            ),
+            optimal_azimuth=OptimalAzimuthResult(
+                optimal_panel_azimuth_deg=0.0,
+                optimal_fixed_energy_kwh_m2=0.0,
+                azimuth_energy_curve_kwh_m2=[0.0] * 360,
+            ),
+        )
+
+    az_sun_deg = np.array([s.sun.azimuth_deg for s in series.samples], dtype=np.float64)
+    el_sun_deg = np.array([s.sun.elevation_deg for s in series.samples], dtype=np.float64)
+    vis_frac = np.array([s.sun.visible_fraction for s in series.samples], dtype=np.float64)
+    dist_km = np.array([s.sun.distance_km for s in series.samples], dtype=np.float64)
+
+    dist_au = np.maximum(dist_km, 1.0) / AU_KM
+    mean_au = float(np.mean(dist_au))
+
+    # Irradiancia espacial efectiva incidente considerando distancia y fraccion visible del disco
+    s_eff = np.where(vis_frac > 0.0, (SOLAR_CONSTANT_AM0_W_M2 / (dist_au**2)) * vis_frac, 0.0)
+
+    # Solo incide radiacion directa si el Sol esta sobre el horizonte matematico (e > 0)
+    el_rad = np.radians(el_sun_deg)
+    az_rad = np.radians(az_sun_deg)
+    sun_above_horizon = el_sun_deg > 0.0
+
+    # 1) Panel horizontal: P = S_eff * sin(e)
+    p_horiz = np.where(sun_above_horizon, s_eff * np.sin(el_rad), 0.0)
+    e_horiz_kwh = float(np.sum(p_horiz) * step_hours / 1000.0)
+
+    # 2) Panel vertical con seguimiento de acimut: P = S_eff * cos(e)
+    p_track = np.where(sun_above_horizon, s_eff * np.cos(el_rad), 0.0)
+    e_track_kwh = float(np.sum(p_track) * step_hours / 1000.0)
+
+    # 3) Panel vertical fijo a fixed_azimuth_deg: P = S_eff * cos(e) * max(0, cos(az_sun - az_panel))
+    panel_fixed_rad = math.radians(fixed_azimuth_deg % 360.0)
+    cos_diff_fixed = np.maximum(0.0, np.cos(az_rad - panel_fixed_rad))
+    p_fixed = np.where(sun_above_horizon, p_track * cos_diff_fixed, 0.0)
+    e_fixed_kwh = float(np.sum(p_fixed) * step_hours / 1000.0)
+
+    # 4) Buscador de Acimut Optimo (0° a 359°)
+    candidate_azimuths_deg = np.arange(360, dtype=np.float64)
+    candidate_azimuths_rad = np.radians(candidate_azimuths_deg)
+
+    # p_track es shape (N,), matriz de cosenos es shape (N, 360)
+    diff_all = az_rad[:, None] - candidate_azimuths_rad[None, :]
+    cos_diff_all = np.maximum(0.0, np.cos(diff_all))
+    p_all_matrix = p_track[:, None] * cos_diff_all
+    energy_all_kwh = np.sum(p_all_matrix, axis=0) * (step_hours / 1000.0)
+
+    best_idx = int(np.argmax(energy_all_kwh))
+    optimal_az = float(candidate_azimuths_deg[best_idx])
+    optimal_energy = float(energy_all_kwh[best_idx])
+    curve_list = [round(float(val), 4) for val in energy_all_kwh]
+
+    return SolarEnergySummary(
+        solar_constant_am0_w_m2=SOLAR_CONSTANT_AM0_W_M2,
+        mean_solar_distance_au=round(mean_au, 6),
+        horizontal_panel=SolarArchitectureEnergy(
+            architecture="horizontal_panel",
+            azimuth_deg=None,
+            total_energy_kwh_m2=round(e_horiz_kwh, 4),
+            peak_flux_w_m2=round(float(np.max(p_horiz)), 2) if n > 0 else 0.0,
+            mean_flux_w_m2=round(float(np.mean(p_horiz)), 2) if n > 0 else 0.0,
+        ),
+        tracking_vertical_panel=SolarArchitectureEnergy(
+            architecture="tracking_vertical_panel",
+            azimuth_deg=None,
+            total_energy_kwh_m2=round(e_track_kwh, 4),
+            peak_flux_w_m2=round(float(np.max(p_track)), 2) if n > 0 else 0.0,
+            mean_flux_w_m2=round(float(np.mean(p_track)), 2) if n > 0 else 0.0,
+        ),
+        fixed_vertical_panel=SolarArchitectureEnergy(
+            architecture="fixed_vertical_panel",
+            azimuth_deg=round(fixed_azimuth_deg % 360.0, 2),
+            total_energy_kwh_m2=round(e_fixed_kwh, 4),
+            peak_flux_w_m2=round(float(np.max(p_fixed)), 2) if n > 0 else 0.0,
+            mean_flux_w_m2=round(float(np.mean(p_fixed)), 2) if n > 0 else 0.0,
+        ),
+        optimal_azimuth=OptimalAzimuthResult(
+            optimal_panel_azimuth_deg=optimal_az,
+            optimal_fixed_energy_kwh_m2=round(optimal_energy, 4),
+            azimuth_energy_curve_kwh_m2=curve_list,
+        ),
+    )
+
+
+def find_optimal_panel_azimuth(series: VisibilityTimeSeries) -> OptimalAzimuthResult:
+    """Evalua los 360 grados de acimut [0°, 359°] y localiza la orientacion de maxima energia (MATH_MODELS §5.4)."""
+    return compute_solar_energy_analysis(series).optimal_azimuth

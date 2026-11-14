@@ -15,6 +15,8 @@ from app.models.schemas import (
     HardwareProfile,
     HorizonProfile,
     HorizonRequest,
+    SolarEnergyRequest,
+    SolarEnergySummary,
     TerrainPatch,
     TerrainPatchRequest,
     VisibilityRequest,
@@ -22,7 +24,11 @@ from app.models.schemas import (
 )
 from app.services.horizon import compute_horizon_profile
 from app.services.terrain import extract_terrain_patch, load_curated_sites, load_hardware_profiles
-from app.services.visibility import compare_sites, compute_visibility_timeseries
+from app.services.visibility import (
+    compare_sites,
+    compute_solar_energy_analysis,
+    compute_visibility_timeseries,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["navigator"])
 
@@ -69,3 +75,17 @@ def post_compare(req: ComparisonRequest) -> ComparisonResult:
     if req.window.end_utc <= req.window.start_utc:
         raise HTTPException(status_code=422, detail="end_utc debe ser posterior a start_utc")
     return compare_sites(req)
+
+
+@router.post("/solar-energy", response_model=SolarEnergySummary)
+def post_solar_energy(req: SolarEnergyRequest) -> SolarEnergySummary:
+    """Calcula potencia por tipo de panel, energia acumulada y buscador de acimut optimo (RF-05, MATH_MODELS §5)."""
+    if req.window.end_utc <= req.window.start_utc:
+        raise HTTPException(status_code=422, detail="end_utc debe ser posterior a start_utc")
+    vis_req = VisibilityRequest(
+        site=req.site,
+        window=req.window,
+        ephemeris=req.ephemeris,
+    )
+    series = compute_visibility_timeseries(vis_req)
+    return compute_solar_energy_analysis(series, fixed_azimuth_deg=req.fixed_azimuth_deg)
