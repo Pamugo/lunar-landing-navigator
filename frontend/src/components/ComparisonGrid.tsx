@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { buildExternalPortalLinks } from "../services/apiClient";
 import type {
   CuratedSite,
@@ -28,6 +28,7 @@ export interface ComparisonGridProps {
   horizonByKey?: Record<string, HorizonProfile>;
   currentSampleByKey: Record<string, VisibilitySample | undefined>;
   windowDays: number;
+  startDateIso?: string;
   mode: AppMode;
 }
 
@@ -423,6 +424,458 @@ export function SolarAzimuthCompass({
   );
 }
 
+/* ---------------- Perfiles de Misión y Ranking de Viabilidad (RF-02, RF-05) ---------------- */
+export type MissionProfileId = "balanced" | "energy" | "comms";
+
+export interface MissionProfileConfig {
+  id: MissionProfileId;
+  name: string;
+  shortDesc: string;
+  weights: {
+    solar: number;
+    dte: number;
+    thermal: number;
+  };
+}
+
+export const MISSION_PROFILES: Record<MissionProfileId, MissionProfileConfig> = {
+  balanced: {
+    id: "balanced",
+    name: "Equilibrado (Artemis)",
+    shortDesc: "40% Energía Solar · 35% DTE · 25% Supervivencia Térmica",
+    weights: { solar: 0.40, dte: 0.35, thermal: 0.25 },
+  },
+  energy: {
+    id: "energy",
+    name: "Prioridad Energía / ISRU",
+    shortDesc: "60% Energía Solar · 20% DTE · 20% Supervivencia Térmica",
+    weights: { solar: 0.60, dte: 0.20, thermal: 0.20 },
+  },
+  comms: {
+    id: "comms",
+    name: "Prioridad Telecomunicaciones",
+    shortDesc: "20% Energía Solar · 60% DTE · 20% Supervivencia Térmica",
+    weights: { solar: 0.20, dte: 0.60, thermal: 0.20 },
+  },
+};
+
+export interface ViabilityAssessment {
+  score: number;
+  solarScore: number;
+  dteScore: number;
+  thermalScore: number;
+  isWinner: boolean;
+  rank: number;
+  verdictSummary: string;
+}
+
+export function computeViabilityAssessments(
+  sites: { coord: LunarCoordinate; key: string }[],
+  metricsByKey: Record<string, SiteSummaryMetrics | undefined>,
+  solarEnergyByKey: Record<string, SolarEnergySummary | undefined> | undefined,
+  profileId: MissionProfileId,
+): Record<string, ViabilityAssessment> {
+  const profile = MISSION_PROFILES[profileId];
+  const { solar: wSolar, dte: wDte, thermal: wThermal } = profile.weights;
+
+  // Normalizacion de energia de panel fijo entre sitios activos
+  let maxOptimalEnergy = 0;
+  for (const s of sites) {
+    const sol = solarEnergyByKey?.[s.key];
+    const energy = sol?.optimal_azimuth.optimal_fixed_energy_kwh_m2 ?? 0;
+    if (energy > maxOptimalEnergy) maxOptimalEnergy = energy;
+  }
+
+  const rawScores: { key: string; score: number; solarScore: number; dteScore: number; thermalScore: number }[] = [];
+
+  for (const s of sites) {
+    const m = metricsByKey[s.key];
+    const sol = solarEnergyByKey?.[s.key];
+
+    // 1. Componente Solar (0..100)
+    let solarScore = 0;
+    if (sol && sol.optimal_azimuth.optimal_fixed_energy_kwh_m2 > 0) {
+      if (maxOptimalEnergy > 0) {
+        solarScore = (sol.optimal_azimuth.optimal_fixed_energy_kwh_m2 / maxOptimalEnergy) * 100;
+      }
+    } else if (m) {
+      solarScore = m.sunlit_fraction * 100;
+    }
+    solarScore = Math.max(0, Math.min(100, solarScore));
+
+    // 2. Componente DTE (0..100)
+    let dteScore = 0;
+    if (m) {
+      dteScore = m.dte_fraction * 100;
+      if (profileId === "comms" && m.advanced_dte) {
+        if (m.advanced_dte.min_clearance_deg > 0) {
+          dteScore = Math.min(100, dteScore * 1.05);
+        } else if (m.advanced_dte.max_clearance_deg < 0) {
+          dteScore = 0;
+        }
+      }
+    }
+    dteScore = Math.max(0, Math.min(100, dteScore));
+
+    // 3. Componente Supervivencia Térmica (0..100) - Noche continua ecuatorial ~354 horas
+    let thermalScore = 100;
+    if (m) {
+      const maxNight = m.longest_darkness_hours;
+      thermalScore = Math.max(0, Math.min(100, 100 * (1 - maxNight / 354.0)));
+    }
+
+    const totalScore = Math.round((wSolar * solarScore + wDte * dteScore + wThermal * thermalScore) * 10) / 10;
+    rawScores.push({ key: s.key, score: totalScore, solarScore, dteScore, thermalScore });
+  }
+
+  const sorted = [...rawScores].sort((a, b) => b.score - a.score);
+
+  const results: Record<string, ViabilityAssessment> = {};
+  sorted.forEach((item, idx) => {
+    const isWinner = idx === 0 && item.score > 0;
+    const rank = idx + 1;
+
+    let verdictSummary = "";
+    if (isWinner) {
+      if (profileId === "energy") {
+        verdictSummary = `Máxima captación solar (${item.solarScore.toFixed(0)}% ref.) y alta radiación útil.`;
+      } else if (profileId === "comms") {
+        verdictSummary = `Líder en conectividad directa con la Tierra (${item.dteScore.toFixed(0)}% enlace continuo).`;
+      } else {
+        verdictSummary = `Mejor balance integral entre radiación solar, enlace DTE y supervivencia térmica.`;
+      }
+    } else {
+      if (item.score < 25) {
+        verdictSummary = `Baja viabilidad: limitación crítica en ${item.dteScore < 10 ? "enlace DTE" : "iluminación solar"}.`;
+      } else {
+        verdictSummary = `Alternativa secundaria #${rank} (${item.score.toFixed(1)} pts).`;
+      }
+    }
+
+    results[item.key] = {
+      score: item.score,
+      solarScore: Math.round(item.solarScore),
+      dteScore: Math.round(item.dteScore),
+      thermalScore: Math.round(item.thermalScore),
+      isWinner,
+      rank,
+      verdictSummary,
+    };
+  });
+
+  return results;
+}
+
+export function exportCsvReport(
+  selectedSites: LunarCoordinate[],
+  curatedSites: CuratedSite[],
+  metricsByKey: Record<string, SiteSummaryMetrics>,
+  solarEnergyByKey: Record<string, SolarEnergySummary | undefined> | undefined,
+  assessments: Record<string, ViabilityAssessment>,
+  profile: MissionProfileConfig,
+  windowDays: number,
+  startDateIso?: string,
+) {
+  const epoch = startDateIso ?? "2027-01-01T00:00:00Z";
+  const headers = [
+    "Sitio / Coordenada",
+    "Tipo",
+    "Latitud (deg)",
+    "Longitud (deg)",
+    "Altura Mastil h0 (m)",
+    "Inicio Mision T0 (UTC)",
+    "Ventana (dias)",
+    "Puntuacion Viabilidad (0-100)",
+    "Ranking",
+    "Veredicto",
+    "Acimut Optimo Panel (deg)",
+    "Rumbo Cardinal Optimo",
+    "Energia Panel Vertical Fijo (kWh/m2)",
+    "Energia Panel Tracking 360 (kWh/m2)",
+    "Energia Panel Suelo Horizontal (kWh/m2)",
+    "Iluminacion Solar (%)",
+    "Enlace Directo Tierra DTE (%)",
+    "Ventana Dorada Sol+DTE (%)",
+    "Ventana Dorada (horas netas)",
+    "Blackout DTE Maximo Continuo (horas)",
+    "Noche Continua Maxima (horas)",
+    "Margen Topografico Clearance Actual (deg)",
+    "Holgura Minima (deg)",
+    "Holgura Maxima (deg)",
+    "Distancia Tierra (km)",
+    "Latencia Ida OWLT (s)",
+    "Latencia RTT (s)",
+    "FSPL Banda S 2.2GHz (dB)",
+    "FSPL Banda X 8.4GHz (dB)",
+    "FSPL Banda Ka 32GHz (dB)",
+  ];
+
+  const rows: string[][] = [headers];
+
+  for (const coord of selectedSites) {
+    const key = coordinateKey(coord);
+    const curated = curatedSites.find((s) => s.id === coord.site_id);
+    const m = metricsByKey[key];
+    const sol = solarEnergyByKey?.[key];
+    const dte = m?.advanced_dte;
+    const ass = assessments[key];
+
+    const name = curated ? curated.name : `Coord (${coord.lat_deg.toFixed(4)}, ${coord.lon_deg.toFixed(4)})`;
+    const type = curated ? curated.category : "personalizada";
+    const optAz = sol ? Math.round(sol.optimal_azimuth.optimal_panel_azimuth_deg) : "";
+    const optCard = sol ? azimuthToCardinal(Number(optAz)) : "";
+
+    rows.push([
+      `"${name.replace(/"/g, '""')}"`,
+      type,
+      coord.lat_deg.toFixed(4),
+      coord.lon_deg.toFixed(4),
+      coord.observer_height_m.toFixed(1),
+      epoch,
+      windowDays.toString(),
+      ass ? ass.score.toFixed(1) : "",
+      ass ? `#${ass.rank}` : "",
+      ass ? `"${ass.verdictSummary.replace(/"/g, '""')}"` : "",
+      optAz.toString(),
+      optCard,
+      sol ? sol.optimal_azimuth.optimal_fixed_energy_kwh_m2.toFixed(2) : "",
+      sol ? sol.tracking_vertical_panel.total_energy_kwh_m2.toFixed(2) : "",
+      sol ? sol.horizontal_panel.total_energy_kwh_m2.toFixed(2) : "",
+      m ? (m.sunlit_fraction * 100).toFixed(1) : "",
+      m ? (m.dte_fraction * 100).toFixed(1) : "",
+      m ? (m.sun_and_dte_fraction * 100).toFixed(1) : "",
+      dte ? dte.simultaneous_sun_earth_hours.toFixed(1) : "",
+      dte ? dte.longest_comms_blackout_hours.toFixed(1) : "",
+      m ? m.longest_darkness_hours.toFixed(1) : "",
+      dte ? dte.terrain_clearance_deg.toFixed(2) : "",
+      dte ? dte.min_clearance_deg.toFixed(2) : "",
+      dte ? dte.max_clearance_deg.toFixed(2) : "",
+      dte ? dte.earth_distance_km.toFixed(0) : "",
+      dte ? dte.one_way_light_time_s.toFixed(3) : "",
+      dte ? dte.round_trip_time_s.toFixed(3) : "",
+      dte ? dte.fspl_s_band_db.toFixed(1) : "",
+      dte ? dte.fspl_x_band_db.toFixed(1) : "",
+      dte ? dte.fspl_ka_band_db.toFixed(1) : "",
+    ]);
+  }
+
+  const csvContent = "\uFEFF" + rows.map((r) => r.join(",")).join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const datePrefix = startDateIso ? startDateIso.slice(0, 10) + "_" : "";
+  a.download = `lunar_mission_${datePrefix}${windowDays}d_${profile.id}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function exportPrintReport(
+  selectedSites: LunarCoordinate[],
+  curatedSites: CuratedSite[],
+  metricsByKey: Record<string, SiteSummaryMetrics>,
+  solarEnergyByKey: Record<string, SolarEnergySummary | undefined> | undefined,
+  assessments: Record<string, ViabilityAssessment>,
+  profile: MissionProfileConfig,
+  windowDays: number,
+  startDateIso?: string,
+) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    alert("Por favor permite las ventanas emergentes (pop-ups) en tu navegador para ver la Ficha Técnica imprimible.");
+    return;
+  }
+
+  const nowUtc = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+
+  let winnerCoord: LunarCoordinate | null = null;
+  let winnerAss: ViabilityAssessment | null = null;
+  for (const c of selectedSites) {
+    const k = coordinateKey(c);
+    if (assessments[k]?.isWinner) {
+      winnerCoord = c;
+      winnerAss = assessments[k];
+      break;
+    }
+  }
+  const winnerCurated = winnerCoord ? curatedSites.find((s) => s.id === winnerCoord?.site_id) : null;
+  const winnerName = winnerCurated
+    ? winnerCurated.name
+    : winnerCoord
+      ? `Coord (${winnerCoord.lat_deg.toFixed(2)}°, ${winnerCoord.lon_deg.toFixed(2)}°)`
+      : "N/A";
+
+  const rowsHtml = selectedSites
+    .map((coord) => {
+      const key = coordinateKey(coord);
+      const curated = curatedSites.find((s) => s.id === coord.site_id);
+      const m = metricsByKey[key];
+      const sol = solarEnergyByKey?.[key];
+      const dte = m?.advanced_dte;
+      const ass = assessments[key];
+      const isWin = ass?.isWinner;
+      const name = curated ? curated.name : `Coord (${coord.lat_deg.toFixed(2)}°, ${coord.lon_deg.toFixed(2)}°)`;
+      const optAz = sol
+        ? `${Math.round(sol.optimal_azimuth.optimal_panel_azimuth_deg)}° ${azimuthToCardinal(sol.optimal_azimuth.optimal_panel_azimuth_deg)}`
+        : "—";
+
+      return `
+        <tr class="${isWin ? "winner-row" : ""}">
+          <td><strong>${isWin ? "🏆 " : `#${ass?.rank ?? "-"} `}${name}</strong></td>
+          <td>${coord.lat_deg.toFixed(3)}°, ${coord.lon_deg.toFixed(3)}°</td>
+          <td>h₀=${coord.observer_height_m.toFixed(1)}m</td>
+          <td><span class="score-pill">${ass ? ass.score.toFixed(1) : "—"} pts</span></td>
+          <td>${optAz}</td>
+          <td>${sol ? sol.optimal_azimuth.optimal_fixed_energy_kwh_m2.toFixed(1) : "—"} kWh/m²</td>
+          <td>${sol ? sol.tracking_vertical_panel.total_energy_kwh_m2.toFixed(1) : "—"} kWh/m²</td>
+          <td>${m ? (m.sunlit_fraction * 100).toFixed(1) : "—"}%</td>
+          <td>${m ? (m.dte_fraction * 100).toFixed(1) : "—"}%</td>
+          <td>${dte ? `${dte.simultaneous_sun_earth_hours.toFixed(1)} h` : "—"}</td>
+          <td>${dte ? `${dte.terrain_clearance_deg >= 0 ? "+" : ""}${dte.terrain_clearance_deg.toFixed(2)}°` : "—"}</td>
+          <td>${dte ? `${dte.round_trip_time_s.toFixed(2)}s` : "—"}</td>
+          <td>${dte ? `${dte.fspl_x_band_db.toFixed(1)} dB / ${dte.fspl_ka_band_db.toFixed(1)} dB` : "—"}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Lunar Landing Site Navigator — Ficha Técnica de Misión</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #0F172A;
+      background: #FFFFFF;
+      margin: 0;
+      padding: 18px;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .print-bar { display: flex; justify-content: flex-end; margin-bottom: 12px; gap: 8px; }
+    .print-btn {
+      background: #0B3D91; color: #FFFFFF; border: none; border-radius: 4px;
+      padding: 6px 14px; font-weight: 600; cursor: pointer; font-size: 12px;
+    }
+    .header { border-bottom: 2px solid #0B3D91; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .title-block h1 { margin: 0; font-size: 18px; color: #0B3D91; }
+    .title-block p { margin: 2px 0 0 0; font-size: 11px; color: #475569; }
+    .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+    .meta-item { display: flex; flex-direction: column; gap: 1px; }
+    .meta-lbl { font-size: 9px; text-transform: uppercase; color: #64748B; font-weight: 600; }
+    .meta-val { font-size: 11px; font-weight: 700; color: #0F172A; }
+    .winner-box {
+      background: #FFFBEB; border: 1px solid #F59E0B; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .winner-info h3 { margin: 0; font-size: 14px; color: #92400E; display: flex; align-items: center; gap: 6px; }
+    .winner-info p { margin: 3px 0 0 0; font-size: 11px; color: #78350F; }
+    .winner-score { font-size: 20px; font-weight: 800; color: #B45309; font-family: monospace; }
+    table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 14px; }
+    th { background: #1E293B; color: #FFFFFF; padding: 6px 7px; text-align: left; font-weight: 600; border: 1px solid #334155; font-size: 9.5px; }
+    td { padding: 6px 7px; border: 1px solid #E2E8F0; vertical-align: middle; }
+    tr:nth-child(even) { background: #F8FAFC; }
+    .winner-row { background: #FEF3C7 !important; font-weight: 600; }
+    .score-pill { font-family: monospace; font-weight: 700; color: #0B3D91; }
+    .footer { border-top: 1px solid #E2E8F0; padding-top: 8px; font-size: 9px; color: #64748B; display: flex; justify-content: space-between; }
+    @media print {
+      .print-bar { display: none; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar">
+    <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+  </div>
+  <div class="header">
+    <div class="title-block">
+      <h1>LUNAR LANDING SITE NAVIGATOR</h1>
+      <p>NASA Space Apps Challenge 2026 · Informe Ejecutivo de Comparación de Sitios Lunares</p>
+    </div>
+    <div style="text-align: right; font-size: 10px; color: #64748B;">
+      <div><strong>Sello Científico:</strong> VAL-20261114-02</div>
+      <div>Efemérides JPL DE421 · Aireless lunar</div>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-item">
+      <span class="meta-lbl">Fecha Emisión</span>
+      <span class="meta-val">${nowUtc}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-lbl">Inicio Misión T₀ (UTC)</span>
+      <span class="meta-val">${startDateIso ?? "2027-01-01T00:00:00Z"}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-lbl">Ventana de Simulación</span>
+      <span class="meta-val">${windowDays} días</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-lbl">Perfil de Misión</span>
+      <span class="meta-val">${profile.name}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-lbl">Ponderación Criterios</span>
+      <span class="meta-val">${profile.shortDesc}</span>
+    </div>
+  </div>
+
+  ${
+    winnerCoord && winnerAss
+      ? `
+  <div class="winner-box">
+    <div class="winner-info">
+      <h3>🏆 SITIO ÓPTIMO RECOMENDADO: ${winnerName}</h3>
+      <p>${winnerAss.verdictSummary}</p>
+    </div>
+    <div class="winner-score">${winnerAss.score.toFixed(1)} / 100 pts</div>
+  </div>`
+      : ""
+  }
+
+  <table>
+    <thead>
+      <tr>
+        <th>Sitio / Candidato</th>
+        <th>Coord (Lat, Lon)</th>
+        <th>Mástil</th>
+        <th>Viabilidad</th>
+        <th>Acimut Ópt. Panel</th>
+        <th>Energía Fijo</th>
+        <th>Tracking 360°</th>
+        <th>Sol (%)</th>
+        <th>DTE (%)</th>
+        <th>Ventana Dorada</th>
+        <th>Clearance</th>
+        <th>Latencia RTT</th>
+        <th>FSPL (X / Ka)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <span>Fuentes de datos: NASA LOLA DEM (LRO PDS) · NASA/JPL Horizons Ephemeris API (coord@301) · IAU MOON_ME Frame</span>
+    <span>Página generada por Lunar Landing Site Navigator — Consola de Vuelo</span>
+  </div>
+</body>
+</html>`;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => printWindow.print(), 350);
+}
+
 export function ComparisonGrid({
   curatedSites,
   selectedSites,
@@ -439,13 +892,24 @@ export function ComparisonGrid({
   horizonByKey,
   currentSampleByKey,
   windowDays,
+  startDateIso,
   mode,
 }: ComparisonGridProps) {
   const [customLat, setCustomLat] = useState<string>("-88.50");
   const [customLon, setCustomLon] = useState<string>("15.00");
-  const [sortBy, setSortBy] = useState<"default" | "solar" | "dte" | "golden">("default");
+  const [missionProfile, setMissionProfile] = useState<MissionProfileId>("balanced");
+  const [sortBy, setSortBy] = useState<"default" | "viability" | "solar" | "dte" | "golden">("viability");
   const [manualAzimuths, setManualAzimuths] = useState<Record<string, number>>({});
   const [customHeights, setCustomHeights] = useState<Record<string, string>>({});
+
+  const assessments = useMemo(() => {
+    return computeViabilityAssessments(
+      selectedSites.map((coord) => ({ coord, key: coordinateKey(coord) })),
+      metricsByKey,
+      solarEnergyByKey,
+      missionProfile,
+    );
+  }, [selectedSites, metricsByKey, solarEnergyByKey, missionProfile]);
 
   const handleCommitHeight = (idx: number, coordKey: string, rawVal: string, fallbackH: number) => {
     const val = Number.parseFloat(rawVal);
@@ -473,10 +937,14 @@ export function ComparisonGrid({
     index,
     key: coordinateKey(coord),
     metrics: metricsByKey[coordinateKey(coord)],
+    assessment: assessments[coordinateKey(coord)],
   }));
 
   if (sortBy !== "default") {
     indexedSites.sort((a, b) => {
+      if (sortBy === "viability") {
+        return (b.assessment?.score ?? 0) - (a.assessment?.score ?? 0);
+      }
       const ma = a.metrics;
       const mb = b.metrics;
       if (!ma || !mb) return 0;
@@ -513,20 +981,84 @@ export function ComparisonGrid({
               ✕ Cerrar todos ({selectedSites.length})
             </button>
           )}
+
+          {/* Selector de Perfil de Misión */}
+          <div className="mission-profile-control">
+            <label htmlFor="mission-profile-select" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              🎯 Perfil:
+            </label>
+            <select
+              id="mission-profile-select"
+              className="hud-select"
+              value={missionProfile}
+              onChange={(e) => setMissionProfile(e.target.value as MissionProfileId)}
+              title={MISSION_PROFILES[missionProfile].shortDesc}
+            >
+              <option value="balanced">Equilibrado (Artemis)</option>
+              <option value="energy">Prioridad Energía / ISRU</option>
+              <option value="comms">Prioridad Telecomunicaciones</option>
+            </select>
+          </div>
+
           <label htmlFor="sort-metrics-select" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-            Ordenar por:
+            Ordenar:
           </label>
           <select
             id="sort-metrics-select"
             className="hud-select"
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as "default" | "solar" | "dte" | "golden")}
+            onChange={(e) => setSortBy(e.target.value as "default" | "viability" | "solar" | "dte" | "golden")}
           >
-            <option value="default">Orden de selección</option>
-            <option value="golden">Mayor Ventana Dorada (Sol + DTE)</option>
+            <option value="viability">🏆 Viabilidad (Ranking)</option>
             <option value="solar">Mayor Iluminación Solar (%)</option>
             <option value="dte">Mayor Visibilidad Tierra DTE (%)</option>
+            <option value="golden">Mayor Ventana Dorada (Sol + DTE)</option>
+            <option value="default">Orden de selección</option>
           </select>
+
+          {/* Botones de Exportación (Exclusivos Modo Ingeniero) */}
+          {mode === "eng" && selectedSites.length > 0 && (
+            <div className="export-btn-group">
+              <button
+                type="button"
+                className="hud-btn-export"
+                onClick={() =>
+                  exportCsvReport(
+                    selectedSites,
+                    curatedSites,
+                    metricsByKey,
+                    solarEnergyByKey,
+                    assessments,
+                    MISSION_PROFILES[missionProfile],
+                    windowDays,
+                    startDateIso,
+                  )
+                }
+                title="Descargar informe completo en formato CSV (.csv)"
+              >
+                📊 Exportar CSV
+              </button>
+              <button
+                type="button"
+                className="hud-btn-export"
+                onClick={() =>
+                  exportPrintReport(
+                    selectedSites,
+                    curatedSites,
+                    metricsByKey,
+                    solarEnergyByKey,
+                    assessments,
+                    MISSION_PROFILES[missionProfile],
+                    windowDays,
+                    startDateIso,
+                  )
+                }
+                title="Generar Ficha Técnica ejecutiva e imprimir / guardar como PDF"
+              >
+                📄 Ficha Técnica (PDF)
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -612,7 +1144,7 @@ export function ComparisonGrid({
             </p>
           </div>
         )}
-        {indexedSites.map(({ coord, index, key, metrics }) => {
+        {indexedSites.map(({ coord, index, key, metrics, assessment }) => {
           const curated = curatedSites.find((c) => c.id === coord.site_id);
           const sample = currentSampleByKey[key];
           const solar = solarEnergyByKey?.[key];
@@ -632,6 +1164,30 @@ export function ComparisonGrid({
               onClick={() => onFocusIndex(index)}
               aria-label={`Tarjeta comparativa de ${curated?.name ?? "Coordenada personalizada"}`}
             >
+              {/* Veredicto y Ranking de Viabilidad de Misión (RF-02, RF-05) */}
+              {assessment && (
+                <div className={`viability-banner ${assessment.isWinner ? "winner" : "rank"}`}>
+                  <div className="viability-badge-row">
+                    <div className="viability-badge">
+                      {assessment.isWinner ? (
+                        <span>🏆 SITIO ÓPTIMO</span>
+                      ) : (
+                        <span>#{assessment.rank} Viabilidad</span>
+                      )}
+                    </div>
+                    <span className="viability-score-num">{assessment.score.toFixed(1)} pts</span>
+                  </div>
+                  <p className="viability-reason">{assessment.verdictSummary}</p>
+                  <div className="viability-pillars">
+                    <span>☀ Sol: {assessment.solarScore}%</span>
+                    <span>·</span>
+                    <span>🜨 DTE: {assessment.dteScore}%</span>
+                    <span>·</span>
+                    <span>🛡 Térm: {assessment.thermalScore}%</span>
+                  </div>
+                </div>
+              )}
+
               <div className="site-card-header">
                 <div>
                   <h3 className="site-card-title">

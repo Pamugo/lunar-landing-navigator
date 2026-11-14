@@ -141,6 +141,48 @@ class TestFastApiEndpoints(unittest.TestCase):
             post_visibility(VisibilityRequest(site=vis_req.site, window=bad_window))
         self.assertEqual(ctx.exception.status_code, 422)
 
+    def test_future_mission_dates_up_to_2053(self) -> None:
+        """Verifica que el backend procesa cualquier ventana futura dentro de JPL DE421 (1900-2053 UTC)."""
+        site = LunarCoordinate(lat_deg=-89.68, lon_deg=-166.0, observer_height_m=2.0, site_id="shackleton-rim")
+
+        # 1. Solsticio Sur (Verano Lunar, 21 Dic 2026)
+        solstice_win = TimeWindow(
+            start_utc=datetime(2026, 12, 21, 0, 0, tzinfo=UTC),
+            end_utc=datetime(2026, 12, 22, 0, 0, tzinfo=UTC),
+            step_minutes=120.0,
+        )
+        res_solstice = post_visibility(VisibilityRequest(site=site, window=solstice_win))
+        self.assertGreater(len(res_solstice.samples), 0)
+        self.assertGreater(res_solstice.samples[0].sun.elevation_deg, -2.0)
+
+        # 2. Invierno Sur (Sombras criticas, 21 Jun 2027)
+        winter_win = TimeWindow(
+            start_utc=datetime(2027, 6, 21, 0, 0, tzinfo=UTC),
+            end_utc=datetime(2027, 6, 22, 0, 0, tzinfo=UTC),
+            step_minutes=120.0,
+        )
+        res_winter = post_visibility(VisibilityRequest(site=site, window=winter_win))
+        self.assertGreater(len(res_winter.samples), 0)
+
+        # 3. Ventana Artemis (15 Sep 2027)
+        artemis_win = TimeWindow(
+            start_utc=datetime(2027, 9, 15, 0, 0, tzinfo=UTC),
+            end_utc=datetime(2027, 9, 16, 0, 0, tzinfo=UTC),
+            step_minutes=120.0,
+        )
+        res_artemis = post_visibility(VisibilityRequest(site=site, window=artemis_win))
+        self.assertGreater(len(res_artemis.samples), 0)
+
+        # 4. Futuro lejano 2050 (dentro del rango DE421 hasta 2053)
+        future_win = TimeWindow(
+            start_utc=datetime(2050, 1, 1, 0, 0, tzinfo=UTC),
+            end_utc=datetime(2050, 1, 2, 0, 0, tzinfo=UTC),
+            step_minutes=120.0,
+        )
+        res_future = post_visibility(VisibilityRequest(site=site, window=future_win))
+        self.assertGreater(len(res_future.samples), 0)
+        self.assertGreater(res_future.samples[0].earth.distance_km, 350000.0)
+
 
 if __name__ == "__main__":
     unittest.main()

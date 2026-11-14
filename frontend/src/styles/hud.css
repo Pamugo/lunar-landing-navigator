@@ -84,11 +84,144 @@ body {
 
 .header-hud {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 18px;
+}
+
+.header-hud-top {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 18px;
+  width: 100%;
+}
+
+.mission-control-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  width: 100%;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.time-input-cluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.time-icon {
+  font-size: 13px;
+}
+
+.datetime-input-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.datetime-picker-input {
+  padding-right: 44px;
+  min-width: 195px;
+  color-scheme: dark;
+  font-size: 12px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.1);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.datetime-picker-input:focus-visible {
+  border-color: #60A5FA;
+  box-shadow: 0 0 14px rgba(96, 165, 250, 0.3);
+  outline: none;
+}
+
+.utc-badge {
+  position: absolute;
+  right: 6px;
+  background: rgba(59, 130, 246, 0.25);
+  color: #93C5FD;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  pointer-events: none;
+  font-family: var(--font-mono);
+}
+
+.presets-cluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.presets-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.presets-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  background: rgba(30, 41, 59, 0.65);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.preset-btn:hover {
+  background: rgba(51, 65, 85, 0.85);
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.preset-btn.active {
+  background: rgba(245, 158, 11, 0.18);
+  color: #FBBF24;
+  border-color: rgba(245, 158, 11, 0.6);
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+}
+
+.window-duration-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .brand-cluster {
@@ -1226,6 +1359,108 @@ body {
   background: rgba(11, 61, 145, 0.65);
   border-color: var(--nasa-blue-accent);
   color: #93C5FD;
+}
+
+/* ---------------- Mission Profile & Viability Ranking (RF-02, RF-05) ---------------- */
+.mission-profile-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viability-banner {
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.viability-banner.winner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(16, 185, 129, 0.25));
+  border: 1px solid rgba(245, 158, 11, 0.65);
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.22);
+}
+
+.viability-banner.rank {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.viability-badge-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.viability-badge {
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viability-banner.winner .viability-badge {
+  color: #FDE047;
+}
+
+.viability-banner.rank .viability-badge {
+  color: var(--text-secondary);
+}
+
+.viability-score-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1px 7px;
+  border-radius: 4px;
+  color: #FFFFFF;
+}
+
+.viability-reason {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.viability-pillars {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.export-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-btn-export {
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.45);
+  color: #38BDF8;
+  border-radius: 4px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease-in-out;
+}
+
+.hud-btn-export:hover {
+  background: rgba(14, 165, 233, 0.3);
+  border-color: #38BDF8;
+  color: #FFFFFF;
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.35);
 }
 
 

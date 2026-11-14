@@ -490,6 +490,16 @@ export function App() {
         selectedHardwareId={selectedHardwareId}
         onHardwareChange={handleHardwareChange}
         scientificSeal={scientificSeal}
+        startDateIso={startDateIso}
+        onStartDateChange={(iso) => {
+          setStartDateIso(iso);
+          setSampleIndex(0);
+        }}
+        windowDays={windowDays}
+        onWindowDaysChange={(d) => {
+          setWindowDays(d);
+          setSampleIndex(0);
+        }}
       />
 
       {/* Pestañas tactiles para Movil y Tablet (< 1024px) */}
@@ -669,6 +679,7 @@ export function App() {
             horizonByKey={horizonByKey}
             currentSampleByKey={currentSampleByKey}
             windowDays={windowDays}
+            startDateIso={startDateIso}
             mode={mode}
           />
         </div>

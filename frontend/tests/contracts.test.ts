@@ -3,10 +3,13 @@ import {
   angularDifference,
   azimuthToCardinal,
   computeShadowSectors,
+  computeViabilityAssessments,
   coordinateKey,
+  MISSION_PROFILES,
   polarToSvg,
 } from "../src/components/ComparisonGrid";
 import { formatDurationSeconds } from "../src/components/EventCountdown";
+import { MISSION_TIME_PRESETS } from "../src/components/HeaderHUD";
 import { buildExternalPortalLinks } from "../src/services/apiClient";
 import { CONTRACT_VERSION } from "../src/types/contracts";
 
@@ -95,5 +98,89 @@ describe("Lunar Landing Site Navigator — Contratos y Utilidades UI (v0.2.0)", 
     // El sector debe incluir 180°
     const sector180 = sectors.find((s) => s.startDeg <= 180 && s.endDeg >= 180);
     expect(sector180).toBeDefined();
+  });
+
+  it("calcula veredicto y ranking de viabilidad segun el perfil de mision (computeViabilityAssessments)", () => {
+    const sites = [
+      { coord: { lat_deg: -89.68, lon_deg: -166.0, observer_height_m: 1.5, site_id: "shackleton-rim" }, key: "shackleton-rim" },
+      { coord: { lat_deg: -86.0, lon_deg: 2.7, observer_height_m: 3.5, site_id: "malapert-massif" }, key: "malapert-massif" },
+      { coord: { lat_deg: -45.44, lon_deg: 177.6, observer_height_m: 1.5, site_id: "change-4" }, key: "change-4" },
+    ];
+
+    const mockMetrics: any = {
+      "shackleton-rim": {
+        sunlit_fraction: 0.85,
+        dte_fraction: 0.55,
+        longest_darkness_hours: 12.0,
+      },
+      "malapert-massif": {
+        sunlit_fraction: 0.70,
+        dte_fraction: 0.95,
+        longest_darkness_hours: 18.0,
+      },
+      "change-4": {
+        sunlit_fraction: 0.50,
+        dte_fraction: 0.0,
+        longest_darkness_hours: 354.0,
+      },
+    };
+
+    const mockSolar: any = {
+      "shackleton-rim": {
+        optimal_azimuth: { optimal_fixed_energy_kwh_m2: 240.0 },
+      },
+      "malapert-massif": {
+        optimal_azimuth: { optimal_fixed_energy_kwh_m2: 190.0 },
+      },
+      "change-4": {
+        optimal_azimuth: { optimal_fixed_energy_kwh_m2: 80.0 },
+      },
+    };
+
+    // Comprueba configuracion de perfiles
+    expect(MISSION_PROFILES.balanced.weights.solar).toBe(0.40);
+    expect(MISSION_PROFILES.energy.weights.solar).toBe(0.60);
+    expect(MISSION_PROFILES.comms.weights.dte).toBe(0.60);
+
+    // 1. Perfil Equilibrado (Artemis)
+    const balancedAssessments = computeViabilityAssessments(sites, mockMetrics, mockSolar, "balanced");
+    expect(balancedAssessments["shackleton-rim"]?.score).toBeGreaterThan(0);
+    expect(balancedAssessments["malapert-massif"]?.score).toBeGreaterThan(0);
+    expect(balancedAssessments["change-4"]?.score).toBeLessThan(balancedAssessments["shackleton-rim"]!.score);
+    // Uno de ellos debe ser el ganador
+    const winnerCount = Object.values(balancedAssessments).filter((a) => a.isWinner).length;
+    expect(winnerCount).toBe(1);
+
+    // 2. Perfil Prioridad Telecomunicaciones: Malapert (95% DTE) debe ganar a Shackleton (55% DTE)
+    const commsAssessments = computeViabilityAssessments(sites, mockMetrics, mockSolar, "comms");
+    expect(commsAssessments["malapert-massif"]?.isWinner).toBe(true);
+    expect(commsAssessments["malapert-massif"]?.rank).toBe(1);
+
+    // 3. Perfil Prioridad Energia: Shackleton (240 kWh/m2) debe ganar a Malapert (190 kWh/m2)
+    const energyAssessments = computeViabilityAssessments(sites, mockMetrics, mockSolar, "energy");
+    expect(energyAssessments["shackleton-rim"]?.isWinner).toBe(true);
+    expect(energyAssessments["shackleton-rim"]?.rank).toBe(1);
+  });
+
+  it("proporciona 4 atajos de mision temporal con fechas UTC validas y parseables", () => {
+    expect(MISSION_TIME_PRESETS.length).toBe(4);
+    const ids = MISSION_TIME_PRESETS.map((p) => p.id);
+    expect(ids).toContain("now");
+    expect(ids).toContain("solstice-2026");
+    expect(ids).toContain("winter-2027");
+    expect(ids).toContain("artemis-2027");
+
+    for (const preset of MISSION_TIME_PRESETS) {
+      if (preset.id === "now") {
+        expect(preset.iso).toBe("NOW");
+      } else {
+        expect(preset.iso.endsWith("Z")).toBe(true);
+        const parsed = Date.parse(preset.iso);
+        expect(Number.isNaN(parsed)).toBe(false);
+        const year = new Date(parsed).getUTCFullYear();
+        expect(year).toBeGreaterThanOrEqual(2026);
+        expect(year).toBeLessThanOrEqual(2053);
+      }
+    }
   });
 });

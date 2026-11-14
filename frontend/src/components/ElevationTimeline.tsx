@@ -147,12 +147,17 @@ export function ElevationTimeline({
           </label>
           <input
             id="start-date-input"
-            type="date"
+            type="datetime-local"
             className="hud-input mono-telemetry"
-            value={startDateIso.slice(0, 10)}
+            value={startDateIso.slice(0, 16)}
+            min="2000-01-01T00:00"
+            max="2053-12-31T23:59"
             onChange={(e) => {
               if (e.target.value) {
-                onStartDateChange(`${e.target.value}T00:00:00Z`);
+                const parsedMs = Date.parse(`${e.target.value}:00Z`);
+                if (!isNaN(parsedMs)) {
+                  onStartDateChange(new Date(parsedMs).toISOString().replace(/\.\d{3}Z$/, "Z"));
+                }
               }
             }}
           />
