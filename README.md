@@ -1,3 +1,6 @@
+<img width="1376" height="728" alt="shackleton_sight_logo_16_9" src="https://github.com/user-attachments/assets/b5a9ff6b-ab43-4063-ad6d-e31d18707a3f" />
+
+
 # Lunar Landing Site Navigator — NASA Space Apps Challenge 2026
 
 Interactive mission-planning and science outreach platform that translates **JPL lunar ephemerides (`de421.bsp` with physical libration `MOON_ME_DE421`)** and **real Lunar Orbiter Laser Altimeter (LOLA) topography** into comparable 2D/3D visualizations for evaluating landing sites, mast heights, solar power, and Direct-to-Earth (DTE) communications under airless lunar physics (`R = 1737.4 km`, `APPARENT = AIRLESS`).
