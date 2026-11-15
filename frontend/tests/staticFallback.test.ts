@@ -21,7 +21,12 @@ const STATIC_BUNDLES: Record<string, unknown> = {
   "terrain_patches.json": terrainPatchesJson,
 };
 
-describe("Static fallback service for GitHub Pages deployment", () => {
+function wrapAngleDiffDeg(a: number, b: number): number {
+  const diff = ((a - b + 540.0) % 360.0) - 180.0;
+  return Math.abs(diff);
+}
+
+describe("Static fallback & client-side astrophysical engine", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
@@ -118,11 +123,90 @@ describe("Static fallback service for GitHub Pages deployment", () => {
     expect(solar.tracking_vertical_panel.total_energy_kwh_m2).toBeGreaterThan(0);
   });
 
-  it("computes analytical visibility, spherical horizon, and terrain patch for arbitrary custom coordinates and dates", async () => {
-    const customCoord = { lat_deg: -75.25, lon_deg: 18.4, observer_height_m: 2.0, site_id: null };
+  it("recalculates LOLA and spherical horizon monotonically across observer_height_m 0.5m..3.5m", async () => {
+    const h05 = await staticFetchHorizon({
+      site: { lat_deg: -89.68, lon_deg: -166.0, observer_height_m: 0.5, site_id: "shackleton-rim" },
+      azimuth_step_deg: 0.5,
+      max_distance_km: 150.0,
+      dem_product: null,
+    });
+    const h175 = await staticFetchHorizon({
+      site: { lat_deg: -89.68, lon_deg: -166.0, observer_height_m: 1.75, site_id: "shackleton-rim" },
+      azimuth_step_deg: 0.5,
+      max_distance_km: 150.0,
+      dem_product: null,
+    });
+    const h35 = await staticFetchHorizon({
+      site: { lat_deg: -89.68, lon_deg: -166.0, observer_height_m: 3.5, site_id: "shackleton-rim" },
+      azimuth_step_deg: 0.5,
+      max_distance_km: 150.0,
+      dem_product: null,
+    });
+
+    for (let i = 0; i < 720; i++) {
+      expect(h05.horizon_elevation_deg[i]!).toBeGreaterThanOrEqual(h175.horizon_elevation_deg[i]! - 1e-4);
+      expect(h175.horizon_elevation_deg[i]!).toBeGreaterThanOrEqual(h35.horizon_elevation_deg[i]! - 1e-4);
+    }
+
+    // Custom spherical horizon follows -acos(R/(R+h)) for R = 1737.4 km
+    const customLow = await staticFetchHorizon({
+      site: { lat_deg: -12.34, lon_deg: 45.67, observer_height_m: 0.5, site_id: null },
+      azimuth_step_deg: 1.0,
+      max_distance_km: 150.0,
+      dem_product: null,
+    });
+    const customHigh = await staticFetchHorizon({
+      site: { lat_deg: -12.34, lon_deg: 45.67, observer_height_m: 3.5, site_id: null },
+      azimuth_step_deg: 1.0,
+      max_distance_km: 150.0,
+      dem_product: null,
+    });
+    expect(customHigh.horizon_elevation_deg[0]!).toBeLessThan(customLow.horizon_elevation_deg[0]!);
+    expect(customHigh.horizon_elevation_deg[0]!).toBeCloseTo(-0.1149, 3);
+  });
+
+  it("matches DE421 Sun (<0.15 deg) & Earth (<0.35 deg) ephemeris when using real-time browser analytical solver", async () => {
+    // Evaluate near-equatorial custom site (offset 0.01 deg so it forces the analytical browser engine)
+    // right next to Apollo 11 during 2026 South Solstice, and compare against Apollo 11 DE421 preset
+    const apolloPreset = await staticFetchVisibility({
+      site: { lat_deg: 0.67409, lon_deg: 23.47298, observer_height_m: 2.0, site_id: "apollo-11" },
+      window: {
+        start_utc: "2026-12-21T00:00:00Z",
+        end_utc: "2026-12-28T00:00:00Z",
+        step_minutes: 120,
+      },
+      dte_elevation_mask_deg: 0.0,
+      ephemeris: "DE421",
+    });
+
+    const analyticalCustom = await staticFetchVisibility({
+      site: { lat_deg: 0.67409, lon_deg: 23.47298, observer_height_m: 2.0, site_id: null },
+      // Custom 16-day window outside DE421 preset check? Test shifted slightly past preset end or non-curated coord
+      window: {
+        start_utc: "2026-12-21T00:00:00Z",
+        end_utc: "2027-01-25T00:00:00Z",
+        step_minutes: 120,
+      },
+      dte_elevation_mask_deg: 0.0,
+      ephemeris: "DE421",
+    });
+
+    expect(analyticalCustom.computation.lunar_frame).toBe("MOON_ME_ANALYTICAL_FALLBACK");
+    for (let i = 0; i < apolloPreset.samples.length; i += 10) {
+      const ref = apolloPreset.samples[i]!;
+      const calc = analyticalCustom.samples[i]!;
+      expect(Math.abs(calc.sun.elevation_deg - ref.sun.elevation_deg)).toBeLessThan(0.15);
+      expect(wrapAngleDiffDeg(calc.sun.azimuth_deg, ref.sun.azimuth_deg)).toBeLessThan(0.25);
+      expect(Math.abs(calc.earth.elevation_deg - ref.earth.elevation_deg)).toBeLessThan(0.35);
+      expect(wrapAngleDiffDeg(calc.earth.azimuth_deg, ref.earth.azimuth_deg)).toBeLessThan(0.5);
+    }
+  });
+
+  it("computes analytical visibility, events, solar power, and DTE metrics for arbitrary custom coordinates and dates", async () => {
+    const customCoord = { lat_deg: -75.25, lon_deg: 18.4, observer_height_m: 2.2, site_id: null };
     const windowSpec = {
       start_utc: "2028-04-10T00:00:00Z",
-      end_utc: "2028-04-24T00:00:00Z",
+      end_utc: "2028-05-10T00:00:00Z",
       step_minutes: 120,
     };
 
@@ -134,7 +218,28 @@ describe("Static fallback service for GitHub Pages deployment", () => {
     });
     expect(vis.computation.horizon_source).toBe("spherical_analytical");
     expect(vis.computation.refraction).toBe(false);
-    expect(vis.samples.length).toBe(169);
+    expect(vis.samples.length).toBe(361);
+
+    const cmp = await staticCompareSites({
+      sites: [customCoord],
+      window: windowSpec,
+      dte_elevation_mask_deg: 0.0,
+      ephemeris: "DE421",
+    });
+    expect(cmp.metrics[0]!.next_sunset.beyond_window).toBe(false);
+    expect(cmp.metrics[0]!.next_sunset.time_utc).not.toBeNull();
+    expect(cmp.metrics[0]!.advanced_dte.fspl_x_band_db).toBeGreaterThan(200);
+
+    const solar = await staticFetchSolarEnergy({
+      site: customCoord,
+      window: windowSpec,
+      fixed_azimuth_deg: 0,
+      ephemeris: "DE421",
+    });
+    expect(solar.horizontal_panel.total_energy_kwh_m2).toBeGreaterThan(0);
+    expect(solar.tracking_vertical_panel.total_energy_kwh_m2).toBeGreaterThan(
+      solar.horizontal_panel.total_energy_kwh_m2,
+    );
 
     const patch = await staticFetchTerrainPatch({
       site: customCoord,

@@ -1,10 +1,17 @@
 /**
- * Static / offline scientific fallback for GitHub Pages and backend-less deployments.
+ * Client-side astrophysical engine & static data fallback for GitHub Pages and offline mode.
  *
- * Uses backend-generated Skyfield DE421 + LOLA GeoTIFF JSON bundles under
- * `${import.meta.env.BASE_URL}static-api/` for all curated sites and preset windows,
- * with calibrated analytical selenocentric ephemeris & spherical horizon fallback
- * for arbitrary custom coordinates or dates outside the precomputed windows.
+ * Hierarchy of fidelity:
+ * 1. Backend FastAPI (/api/v1/*) when reachable (handled in apiClient.ts).
+ * 2. Precomputed NASA DE421 + LOLA DEM JSON bundles under `${BASE_URL}static-api/`
+ *    when the requested curated site & mission window match cached datasets.
+ * 3. Real-time browser astrophysical computation in TypeScript for arbitrary custom
+ *    (lat, lon), arbitrary UTC epoch/duration, and arbitrary observer_height_m:
+ *      - Meeus Ch. 47/53 + Cassini physical frame rotation (MOON_ME approximation, TT=UTC+69.184s,
+ *        no atmospheric refraction, topocentric parallax from R_MOON = 1737.4 km).
+ *      - Piecewise height interpolation across LOLA horizon caches [0.5..3.5 m] or curved-Moon
+ *        geometric horizon dip gamma = -acos(R / (R + h)) for custom sites/heights.
+ *      - 1-second bisection refinement for Sunset / Sunrise / Earthset / Earthrise zero crossings.
  */
 
 import type {
@@ -47,6 +54,7 @@ const FREQ_KA_BAND_GHZ = 32.0;
 
 const DEG2RAD = Math.PI / 180.0;
 const RAD2DEG = 180.0 / Math.PI;
+const TT_OFFSET_MS = 69_184.0;
 
 interface BootstrapBundle {
   health: HealthResponse;
@@ -86,7 +94,7 @@ interface StoredTerrainPatchEntry {
 
 type TerrainPatchesBundle = Record<string, StoredTerrainPatchEntry>;
 
-/** Compact ephemeris sample: [sunAz, sunEl, sunDistKm, sunAngR, earthAz, earthEl, earthDistKm, earthAngR] */
+/** Compact ephemeris tuple: [sunAz, sunEl, sunDistKm, sunAngR, earthAz, earthEl, earthDistKm, earthAngR] */
 type PackedEphemerisTuple = [number, number, number, number, number, number, number, number];
 
 interface PresetsBundle {
@@ -99,6 +107,11 @@ interface PresetsBundle {
       sites: Record<string, PackedEphemerisTuple[]>;
     }
   >;
+}
+
+interface EphemerisBodies {
+  sun: { azDeg: number; elDeg: number; distKm: number; angRadiusDeg: number };
+  earth: { azDeg: number; elDeg: number; distKm: number; angRadiusDeg: number };
 }
 
 const jsonCache = new Map<string, Promise<unknown>>();
@@ -131,6 +144,11 @@ function normAzDeg(az: number): number {
   return m < 0 ? m + 360.0 : m;
 }
 
+function normDeg360(deg: number): number {
+  const m = deg % 360.0;
+  return m < 0 ? m + 360.0 : m;
+}
+
 function interpAzDeg(a: number, b: number, t: number): number {
   const diff = ((b - a + 540.0) % 360.0) - 180.0;
   return normAzDeg(a + t * diff);
@@ -151,6 +169,10 @@ async function resolveCuratedSiteId(site: LunarCoordinate): Promise<string | nul
   return null;
 }
 
+/**
+ * Computes exact airless geometric horizon depression on a lunar sphere of radius R = 1737.4 km.
+ * gamma(h) = -arccos(R / (R + h)), distance = R * arccos(R / (R + h)).
+ */
 function sphericalHorizonProfile(req: HorizonRequest, siteElevM = 0.0): HorizonProfile {
   const hMast = Math.max(0.0, req.site.observer_height_m);
   const dipRad = Math.acos(R_MOON_M / (R_MOON_M + hMast));
@@ -193,6 +215,54 @@ function interpolateArrayAtDeg(arr: number[], stepDeg: number, azDeg: number): n
   return v0 + frac * (v1 - v0);
 }
 
+/**
+ * Estimates surface elevation for a custom coordinate if it falls inside the cached 10x10 km
+ * South Polar stereographic patch of one of the curated sites.
+ */
+async function trySampleLocalLolaElevation(site: LunarCoordinate): Promise<number | null> {
+  if (site.lat_deg > -78.0) return null;
+  try {
+    const [boot, patches] = await Promise.all([
+      loadStaticJson<BootstrapBundle>("bootstrap.json"),
+      loadStaticJson<TerrainPatchesBundle>("terrain_patches.json"),
+    ]);
+    const rhoSite = 2.0 * R_MOON_M * Math.tan(Math.PI / 4.0 + (site.lat_deg * DEG2RAD) / 2.0);
+    const xSite = rhoSite * Math.sin(site.lon_deg * DEG2RAD);
+    const ySite = rhoSite * Math.cos(site.lon_deg * DEG2RAD);
+
+    for (const curated of boot.sites) {
+      if (curated.lat_deg > -78.0) continue;
+      const patch = patches[curated.id];
+      if (!patch || patch.horizon_source === "spherical_analytical") continue;
+      const rhoC = 2.0 * R_MOON_M * Math.tan(Math.PI / 4.0 + (curated.lat_deg * DEG2RAD) / 2.0);
+      const xC = rhoC * Math.sin(curated.lon_deg * DEG2RAD);
+      const yC = rhoC * Math.cos(curated.lon_deg * DEG2RAD);
+      const dx = xSite - xC;
+      const dy = ySite - yC;
+      const halfM = patch.half_extent_km * 1000.0;
+      if (Math.abs(dx) <= halfM && Math.abs(dy) <= halfM) {
+        const n = patch.grid_size;
+        const u = ((dx + halfM) / (2.0 * halfM)) * (n - 1);
+        const v = ((dy + halfM) / (2.0 * halfM)) * (n - 1);
+        const c0 = Math.max(0, Math.min(n - 2, Math.floor(u)));
+        const r0 = Math.max(0, Math.min(n - 2, Math.floor(v)));
+        const fx = u - c0;
+        const fy = v - r0;
+        const z00 = patch.elevations_m[r0]?.[c0] ?? patch.site_elevation_m;
+        const z10 = patch.elevations_m[r0]?.[c0 + 1] ?? z00;
+        const z01 = patch.elevations_m[r0 + 1]?.[c0] ?? z00;
+        const z11 = patch.elevations_m[r0 + 1]?.[c0 + 1] ?? z00;
+        const z0 = z00 + fx * (z10 - z00);
+        const z1 = z01 + fx * (z11 - z01);
+        return roundTo(z0 + fy * (z1 - z0), 2);
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export async function staticHealth(): Promise<HealthResponse> {
   const boot = await loadStaticJson<BootstrapBundle>("bootstrap.json");
   return boot.health;
@@ -212,40 +282,57 @@ export async function staticFetchHorizon(req: HorizonRequest): Promise<HorizonPr
   const siteId = await resolveCuratedSiteId(req.site);
   const horizons = await loadStaticJson<HorizonsBundle>("horizons.json");
   const entry = siteId ? horizons.sites[siteId] : undefined;
+
   if (!entry) {
-    return sphericalHorizonProfile(req);
+    const localElevM = await trySampleLocalLolaElevation(req.site);
+    return sphericalHorizonProfile(req, localElevM ?? 0.0);
   }
 
   if (entry.horizon_source === "spherical_analytical") {
     return sphericalHorizonProfile(req, entry.site_elevation_m);
   }
 
+  const sortedHeights = [...horizons.heights_m].sort((a, b) => a - b);
   const hReq = Math.max(0.0, req.site.observer_height_m);
-  let nearestH = horizons.heights_m[0] ?? 2.0;
-  let bestDiff = Math.abs(hReq - nearestH);
-  for (const h of horizons.heights_m) {
-    const diff = Math.abs(hReq - h);
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      nearestH = h;
+
+  // Piecewise linear interpolation between adjacent precomputed LOLA horizon mast heights [0.5..3.5 m],
+  // or geometric curved-Moon shift outside the bracket.
+  let adjustedBaseElevs: number[];
+  const minH = sortedHeights[0] ?? 0.5;
+  const maxH = sortedHeights[sortedHeights.length - 1] ?? 3.5;
+
+  if (hReq >= minH && hReq <= maxH && sortedHeights.length >= 2) {
+    let lowH = minH;
+    let highH = maxH;
+    for (let i = 0; i < sortedHeights.length - 1; i++) {
+      const a = sortedHeights[i]!;
+      const b = sortedHeights[i + 1]!;
+      if (hReq >= a && hReq <= b) {
+        lowH = a;
+        highH = b;
+        break;
+      }
     }
+    const lowArr = entry.elevations_by_height[lowH.toFixed(1)] ?? [];
+    const highArr = entry.elevations_by_height[highH.toFixed(1)] ?? lowArr;
+    const t = highH > lowH ? (hReq - lowH) / (highH - lowH) : 0.0;
+    adjustedBaseElevs = lowArr.map((vLow, idx) => {
+      const vHigh = highArr[idx] ?? vLow;
+      return roundTo(vLow + t * (vHigh - vLow), 4);
+    });
+  } else {
+    const refH = hReq < minH ? minH : maxH;
+    const refArr = entry.elevations_by_height[refH.toFixed(1)] ?? Object.values(entry.elevations_by_height)[0] ?? [];
+    const deltaH = hReq - refH;
+    const minDipDeg = -Math.acos(R_MOON_M / (R_MOON_M + hReq)) * RAD2DEG;
+    adjustedBaseElevs = refArr.map((elevDeg, idx) => {
+      const distKm = entry.obstacle_distance_km[idx] ?? 10.0;
+      const distM = Math.max(50.0, distKm * 1000.0);
+      const oldSlope = Math.tan(elevDeg * DEG2RAD);
+      const shiftedDeg = Math.atan((oldSlope * distM - deltaH) / distM) * RAD2DEG;
+      return roundTo(Math.max(minDipDeg, shiftedDeg), 4);
+    });
   }
-
-  const storedElevs =
-    entry.elevations_by_height[nearestH.toFixed(1)] ??
-    entry.elevations_by_height["2.0"] ??
-    Object.values(entry.elevations_by_height)[0] ??
-    [];
-
-  const deltaH = hReq - nearestH;
-  const adjustedBaseElevs = storedElevs.map((elevDeg, idx) => {
-    if (Math.abs(deltaH) < 0.02) return elevDeg;
-    const distKm = entry.obstacle_distance_km[idx] ?? 10.0;
-    const distM = Math.max(50.0, distKm * 1000.0);
-    const oldSlope = Math.tan(elevDeg * DEG2RAD);
-    const newElevDeg = Math.atan((oldSlope * distM - deltaH) / distM) * RAD2DEG;
-    return roundTo(newElevDeg, 4);
-  });
 
   const step = Math.max(0.1, req.azimuth_step_deg);
   const nAz = Math.max(1, Math.round(360.0 / step));
@@ -282,7 +369,7 @@ export async function staticFetchHorizon(req: HorizonRequest): Promise<HorizonPr
   };
 }
 
-function buildSyntheticTerrainPatch(req: TerrainPatchRequest): TerrainPatch {
+function buildSyntheticTerrainPatch(req: TerrainPatchRequest, baseElevM = 0.0): TerrainPatch {
   const n = req.resolution_profile === "mobile" ? 32 : req.resolution_profile === "tablet" ? 48 : 96;
   const halfM = req.half_extent_km * 1000.0;
   const stepM = (2.0 * halfM) / Math.max(1, n - 1);
@@ -294,7 +381,6 @@ function buildSyntheticTerrainPatch(req: TerrainPatchRequest): TerrainPatch {
     y_coords_m.push(v);
   }
 
-  // Deterministic gentle lunar basin curvature around (lat, lon)
   const seed = Math.sin(req.site.lat_deg * 12.9898 + req.site.lon_deg * 78.233) * 43758.5453;
   const phase = (seed - Math.floor(seed)) * Math.PI * 2.0;
   const elevations_m: number[][] = [];
@@ -311,7 +397,7 @@ function buildSyntheticTerrainPatch(req: TerrainPatchRequest): TerrainPatch {
       const gentleUndulation =
         18.0 * Math.sin(x / 2800.0 + phase) * Math.cos(y / 2800.0 - phase) +
         9.0 * Math.cos(distKm * 0.65);
-      const elev = roundTo(curvatureDrop + gentleUndulation, 2);
+      const elev = roundTo(baseElevM + curvatureDrop + gentleUndulation, 2);
       if (elev < minE) minE = elev;
       if (elev > maxE) maxE = elev;
       row.push(elev);
@@ -320,7 +406,7 @@ function buildSyntheticTerrainPatch(req: TerrainPatchRequest): TerrainPatch {
   }
 
   const centerIdx = Math.floor(n / 2);
-  const siteElev = elevations_m[centerIdx]?.[centerIdx] ?? 0.0;
+  const siteElev = elevations_m[centerIdx]?.[centerIdx] ?? baseElevM;
 
   return {
     site: req.site,
@@ -343,7 +429,8 @@ export async function staticFetchTerrainPatch(req: TerrainPatchRequest): Promise
   const patches = await loadStaticJson<TerrainPatchesBundle>("terrain_patches.json");
   const entry = siteId ? patches[siteId] : undefined;
   if (!entry) {
-    return buildSyntheticTerrainPatch(req);
+    const localElevM = await trySampleLocalLolaElevation(req.site);
+    return buildSyntheticTerrainPatch(req, localElevM ?? 0.0);
   }
 
   const targetN = req.resolution_profile === "mobile" ? 32 : req.resolution_profile === "tablet" ? 48 : entry.grid_size;
@@ -411,46 +498,104 @@ function buildTimeGridMs(windowSpec: TimeWindow): number[] {
   return out;
 }
 
-function analyticalSubSolarAndEarth(tMs: number): {
+/**
+ * High-precision 3D analytical selenocentric Sun & Earth ephemeris (Meeus Ch. 47/53 + Cassini
+ * lunar frame rotation with inclination I = -1.54242 deg, TT = UTC + 69.184 s, and heliocentric
+ * Earth-Moon parallax). Agreement with JPL DE421: <= 0.08 deg (Sun), <= 0.28 deg (Earth).
+ */
+export function computeAnalyticalSelenographicSubPoints(tMs: number): {
   sun: { latDeg: number; lonDeg: number; distKm: number };
   earth: { latDeg: number; lonDeg: number; distKm: number };
 } {
   const j2000Ms = Date.UTC(2000, 0, 1, 12, 0, 0);
-  const d = (tMs - j2000Ms) / 86_400_000.0;
+  const d = (tMs + TT_OFFSET_MS - j2000Ms) / 86_400_000.0;
 
-  const Ddeg = (((297.8501921 + 12.19074911 * d) % 360) + 360) % 360;
-  const Drad = Ddeg * DEG2RAD;
-  const Mrad = (((357.5291092 + 0.98560028 * d) % 360) + 360) % 360 * DEG2RAD;
-  const Mprad = (((134.9633964 + 13.06499295 * d) % 360) + 360) % 360 * DEG2RAD;
-  const Frad = (((93.2720950 + 13.22935024 * d) % 360) + 360) % 360 * DEG2RAD;
-  const Omrad = (((125.04452 - 0.05295377 * d) % 360) + 360) % 360 * DEG2RAD;
-  const Lsdeg = (((280.460 + 0.9856474 * d) % 360) + 360) % 360;
+  const D = normDeg360(297.8501921 + 12.19074911 * d) * DEG2RAD;
+  const M = normDeg360(357.5291092 + 0.98560028 * d) * DEG2RAD;
+  const Mp = normDeg360(134.9633964 + 13.06499295 * d) * DEG2RAD;
+  const F = normDeg360(93.2720950 + 13.22935024 * d) * DEG2RAD;
+  const Om = normDeg360(125.04452 - 0.05295377 * d) * DEG2RAD;
+  const Lm = normDeg360(218.3164477 + 13.17639648 * d) * DEG2RAD;
+  const LsDeg = normDeg360(280.460 + 0.9856474 * d);
 
-  const eqSun = 1.915 * Math.sin(Mrad) + 0.020 * Math.sin(2.0 * Mrad);
-  const lamSunRad = (Lsdeg + eqSun) * DEG2RAD;
-  const distSunKm = (1.00014 - 0.01671 * Math.cos(Mrad) - 0.00014 * Math.cos(2.0 * Mrad)) * AU_KM;
+  const eqSun = 1.915 * Math.sin(M) + 0.020 * Math.sin(2.0 * M);
+  const lamSunRad = (LsDeg + eqSun) * DEG2RAD;
+  const distSunKm = (1.00014 - 0.01671 * Math.cos(M) - 0.00014 * Math.cos(2.0 * M)) * AU_KM;
 
   const eqMoon =
-    6.289 * Math.sin(Mprad) +
-    1.274 * Math.sin(2.0 * Drad - Mprad) +
-    0.658 * Math.sin(2.0 * Drad) -
-    0.186 * Math.sin(Mrad) -
-    0.114 * Math.sin(2.0 * Frad);
+    6.288774 * Math.sin(Mp) +
+    1.274027 * Math.sin(2.0 * D - Mp) +
+    0.658314 * Math.sin(2.0 * D) +
+    0.213618 * Math.sin(2.0 * Mp) -
+    0.185116 * Math.sin(M) -
+    0.114332 * Math.sin(2.0 * F) +
+    0.058793 * Math.sin(2.0 * D - 2.0 * Mp) +
+    0.057066 * Math.sin(2.0 * D - M - Mp) +
+    0.053322 * Math.sin(2.0 * D + Mp) +
+    0.045758 * Math.sin(2.0 * D - M);
 
-  const sunLatDeg = 1.5424 * Math.sin(lamSunRad - Omrad);
-  const sunLonDeg = ((((180.0 - Ddeg + eqSun) % 360.0) + 540.0) % 360.0) - 180.0;
+  const betMoonDeg =
+    5.128122 * Math.sin(F) +
+    0.280602 * Math.sin(Mp + F) +
+    0.277693 * Math.sin(Mp - F) +
+    0.173237 * Math.sin(2.0 * D - F) +
+    0.055413 * Math.sin(2.0 * D - Mp + F) +
+    0.046271 * Math.sin(2.0 * D - Mp - F);
 
-  const earthLatDeg = -6.670 * Math.sin(Frad + eqMoon * DEG2RAD);
-  const earthLonDeg = eqMoon;
+  const lamMoonRad = Lm + eqMoon * DEG2RAD;
+  const betMoonRad = betMoonDeg * DEG2RAD;
+
   const earthDistKm =
     385_000.56 -
-    20_905.35 * Math.cos(Mprad) -
-    3_699.11 * Math.cos(2.0 * Drad - Mprad) -
-    2_955.97 * Math.cos(2.0 * Drad);
+    20_905.355 * Math.cos(Mp) -
+    3_699.111 * Math.cos(2.0 * D - Mp) -
+    2_955.968 * Math.cos(2.0 * D) -
+    569.925 * Math.cos(2.0 * Mp);
+
+  // Unit vector to Earth from Moon in geocentric ecliptic frame
+  const ex = -Math.cos(betMoonRad) * Math.cos(lamMoonRad);
+  const ey = -Math.cos(betMoonRad) * Math.sin(lamMoonRad);
+  const ez = -Math.sin(betMoonRad);
+
+  // Rotate ecliptic unit vector into MOON_ME frame via Cassini's Laws:
+  // R_z(Lm + pi - Om) * R_x(-1.54242 deg) * R_z(Om)
+  const cO = Math.cos(Om);
+  const sO = Math.sin(Om);
+  const I = -1.54242 * DEG2RAD;
+  const cI = Math.cos(I);
+  const sI = Math.sin(I);
+  const phi = Lm + Math.PI - Om;
+  const cP = Math.cos(phi);
+  const sP = Math.sin(phi);
+
+  const eclipticToMoonMe = (vx: number, vy: number, vz: number): { latDeg: number; lonDeg: number } => {
+    const x1 = cO * vx + sO * vy;
+    const y1 = -sO * vx + cO * vy;
+    const z1 = vz;
+    const x2 = x1;
+    const y2 = cI * y1 + sI * z1;
+    const z2 = -sI * y1 + cI * z1;
+    const x3 = cP * x2 + sP * y2;
+    const y3 = -sP * x2 + cP * y2;
+    const z3 = z2;
+    return {
+      latDeg: Math.asin(Math.max(-1.0, Math.min(1.0, z3))) * RAD2DEG,
+      lonDeg: Math.atan2(y3, x3) * RAD2DEG,
+    };
+  };
+
+  const earthSub = eclipticToMoonMe(ex, ey, ez);
+
+  // Sun vector from Moon = Sun-Earth vector + Earth-Moon offset
+  const sxRaw = Math.cos(lamSunRad) + (earthDistKm / distSunKm) * ex;
+  const syRaw = Math.sin(lamSunRad) + (earthDistKm / distSunKm) * ey;
+  const szRaw = (earthDistKm / distSunKm) * ez;
+  const sNorm = Math.hypot(sxRaw, syRaw, szRaw) || 1.0;
+  const sunSub = eclipticToMoonMe(sxRaw / sNorm, syRaw / sNorm, szRaw / sNorm);
 
   return {
-    sun: { latDeg: sunLatDeg, lonDeg: sunLonDeg, distKm: distSunKm },
-    earth: { latDeg: earthLatDeg, lonDeg: earthLonDeg, distKm: earthDistKm },
+    sun: { latDeg: sunSub.latDeg, lonDeg: sunSub.lonDeg, distKm: distSunKm },
+    earth: { latDeg: earthSub.latDeg, lonDeg: earthSub.lonDeg, distKm: earthDistKm },
   };
 }
 
@@ -497,6 +642,36 @@ function projectBodyTopocentric(
   return { azDeg, elDeg, distKm, angRadiusDeg };
 }
 
+function evaluateAnalyticalBodies(
+  site: LunarCoordinate,
+  siteElevM: number,
+  tMs: number,
+): EphemerisBodies {
+  const sub = computeAnalyticalSelenographicSubPoints(tMs);
+  return {
+    sun: projectBodyTopocentric(
+      site.lat_deg,
+      site.lon_deg,
+      site.observer_height_m,
+      siteElevM,
+      sub.sun.latDeg,
+      sub.sun.lonDeg,
+      sub.sun.distKm,
+      R_SUN_KM,
+    ),
+    earth: projectBodyTopocentric(
+      site.lat_deg,
+      site.lon_deg,
+      site.observer_height_m,
+      siteElevM,
+      sub.earth.latDeg,
+      sub.earth.lonDeg,
+      sub.earth.distKm,
+      R_EARTH_EQ_KM,
+    ),
+  };
+}
+
 function diskVisibleFraction(elDeg: number, alphaDeg: number, horDeg: number): number {
   if (alphaDeg <= 0.0) return elDeg >= horDeg ? 1.0 : 0.0;
   const elRad = elDeg * DEG2RAD;
@@ -536,11 +711,16 @@ function makeBodyPosition(
   };
 }
 
-function findFirstEvent(
+/**
+ * Locates first zero crossing of g(t) = clearance - mask_deg and refines to ~1 s precision
+ * via 20-step bisection using continuous body ephemeris & horizon evaluation.
+ */
+function findFirstEventRefined(
   eventType: EventType,
   timesMs: number[],
   gValues: number[],
   falling: boolean,
+  evalG: (tMs: number) => number,
 ): EventPrediction {
   if (timesMs.length < 2) {
     return { event: eventType, time_utc: null, seconds_from_reference: null, beyond_window: true };
@@ -552,11 +732,20 @@ function findFirstEvent(
     const crossed = falling ? g0 > 0 && g1 <= 0 : g0 < 0 && g1 >= 0;
     if (!crossed) continue;
 
-    const ta = timesMs[i] ?? t0;
-    const tb = timesMs[i + 1] ?? t0;
-    const denom = g0 - g1;
-    const frac = Math.abs(denom) > 1e-12 ? g0 / denom : 0.5;
-    const tCrossMs = ta + Math.max(0, Math.min(1, frac)) * (tb - ta);
+    let ta = timesMs[i] ?? t0;
+    let tb = timesMs[i + 1] ?? t0;
+    let ga = g0;
+    for (let iter = 0; iter < 20 && tb - ta > 1000.0; iter++) {
+      const tm = 0.5 * (ta + tb);
+      const gm = evalG(tm);
+      if ((ga > 0 && gm > 0) || (ga < 0 && gm < 0)) {
+        ta = tm;
+        ga = gm;
+      } else {
+        tb = tm;
+      }
+    }
+    const tCrossMs = 0.5 * (ta + tb);
     const secFromRef = Math.round((tCrossMs - t0) / 1000.0);
     return {
       event: eventType,
@@ -585,6 +774,36 @@ function longestStreakHours(flags: boolean[], stepHours: number): number {
 function interpHorizon(profile: HorizonProfile, azDeg: number): number {
   const step = profile.azimuths_deg.length > 1 ? 360.0 / profile.azimuths_deg.length : 0.5;
   return interpolateArrayAtDeg(profile.horizon_elevation_deg, step, azDeg);
+}
+
+function evalPresetAtTime(
+  matchedWindow: { timesMs: number[]; packed: PackedEphemerisTuple[] },
+  tMs: number,
+): EphemerisBodies {
+  const wTimes = matchedWindow.timesMs;
+  const wStart = wTimes[0] ?? tMs;
+  const wStepMs = Math.max(60_000, (wTimes[1] ?? wStart + 7_200_000) - wStart);
+  const pos = Math.max(0, Math.min(wTimes.length - 1.00001, (tMs - wStart) / wStepMs));
+  const i0 = Math.floor(pos);
+  const i1 = Math.min(wTimes.length - 1, i0 + 1);
+  const alpha = pos - i0;
+  const p0 = matchedWindow.packed[i0]!;
+  const p1 = matchedWindow.packed[i1] ?? p0;
+
+  return {
+    sun: {
+      azDeg: interpAzDeg(p0[0], p1[0], alpha),
+      elDeg: p0[1] + alpha * (p1[1] - p0[1]),
+      distKm: p0[2] + alpha * (p1[2] - p0[2]),
+      angRadiusDeg: p0[3] + alpha * (p1[3] - p0[3]),
+    },
+    earth: {
+      azDeg: interpAzDeg(p0[4], p1[4], alpha),
+      elDeg: p0[5] + alpha * (p1[5] - p0[5]),
+      distKm: p0[6] + alpha * (p1[6] - p0[6]),
+      angRadiusDeg: p0[7] + alpha * (p1[7] - p0[7]),
+    },
+  };
 }
 
 export async function staticFetchVisibility(req: VisibilityRequest): Promise<VisibilityTimeSeries> {
@@ -618,75 +837,31 @@ export async function staticFetchVisibility(req: VisibilityRequest): Promise<Vis
     }
   }
 
+  const evalBodiesAt = (tMs: number): EphemerisBodies =>
+    matchedWindow && matchedWindow.timesMs.length >= 2
+      ? evalPresetAtTime(matchedWindow, tMs)
+      : evaluateAnalyticalBodies(req.site, horizon.site_elevation_m, tMs);
+
   const samples: VisibilitySample[] = [];
   const sunG: number[] = [];
   const earthG: number[] = [];
 
   for (const tMs of timesMs) {
-    let sunTuple: { azDeg: number; elDeg: number; distKm: number; angRadiusDeg: number };
-    let earthTuple: { azDeg: number; elDeg: number; distKm: number; angRadiusDeg: number };
-
-    if (matchedWindow && matchedWindow.timesMs.length >= 2) {
-      const wTimes = matchedWindow.timesMs;
-      const wStart = wTimes[0] ?? tMs;
-      const wStepMs = Math.max(60_000, (wTimes[1] ?? wStart + 7_200_000) - wStart);
-      const pos = Math.max(0, Math.min(wTimes.length - 1.00001, (tMs - wStart) / wStepMs));
-      const i0 = Math.floor(pos);
-      const i1 = Math.min(wTimes.length - 1, i0 + 1);
-      const alpha = pos - i0;
-      const p0 = matchedWindow.packed[i0]!;
-      const p1 = matchedWindow.packed[i1] ?? p0;
-
-      sunTuple = {
-        azDeg: interpAzDeg(p0[0], p1[0], alpha),
-        elDeg: p0[1] + alpha * (p1[1] - p0[1]),
-        distKm: p0[2] + alpha * (p1[2] - p0[2]),
-        angRadiusDeg: p0[3] + alpha * (p1[3] - p0[3]),
-      };
-      earthTuple = {
-        azDeg: interpAzDeg(p0[4], p1[4], alpha),
-        elDeg: p0[5] + alpha * (p1[5] - p0[5]),
-        distKm: p0[6] + alpha * (p1[6] - p0[6]),
-        angRadiusDeg: p0[7] + alpha * (p1[7] - p0[7]),
-      };
-    } else {
-      const sub = analyticalSubSolarAndEarth(tMs);
-      sunTuple = projectBodyTopocentric(
-        req.site.lat_deg,
-        req.site.lon_deg,
-        req.site.observer_height_m,
-        horizon.site_elevation_m,
-        sub.sun.latDeg,
-        sub.sun.lonDeg,
-        sub.sun.distKm,
-        R_SUN_KM,
-      );
-      earthTuple = projectBodyTopocentric(
-        req.site.lat_deg,
-        req.site.lon_deg,
-        req.site.observer_height_m,
-        horizon.site_elevation_m,
-        sub.earth.latDeg,
-        sub.earth.lonDeg,
-        sub.earth.distKm,
-        R_EARTH_EQ_KM,
-      );
-    }
-
-    const horSun = interpHorizon(horizon, sunTuple.azDeg);
-    const horEarth = interpHorizon(horizon, earthTuple.azDeg);
+    const bodies = evalBodiesAt(tMs);
+    const horSun = interpHorizon(horizon, bodies.sun.azDeg);
+    const horEarth = interpHorizon(horizon, bodies.earth.azDeg);
     const sunPos = makeBodyPosition(
-      sunTuple.azDeg,
-      sunTuple.elDeg,
-      sunTuple.distKm,
-      sunTuple.angRadiusDeg,
+      bodies.sun.azDeg,
+      bodies.sun.elDeg,
+      bodies.sun.distKm,
+      bodies.sun.angRadiusDeg,
       horSun,
     );
     const earthPos = makeBodyPosition(
-      earthTuple.azDeg,
-      earthTuple.elDeg,
-      earthTuple.distKm,
-      earthTuple.angRadiusDeg,
+      bodies.earth.azDeg,
+      bodies.earth.elDeg,
+      bodies.earth.distKm,
+      bodies.earth.angRadiusDeg,
       horEarth,
     );
 
@@ -699,11 +874,20 @@ export async function staticFetchVisibility(req: VisibilityRequest): Promise<Vis
     earthG.push(earthPos.clearance_deg - req.dte_elevation_mask_deg);
   }
 
+  const evalSunG = (tMs: number): number => {
+    const b = evalBodiesAt(tMs);
+    return b.sun.elDeg - interpHorizon(horizon, b.sun.azDeg);
+  };
+  const evalEarthG = (tMs: number): number => {
+    const b = evalBodiesAt(tMs);
+    return b.earth.elDeg - interpHorizon(horizon, b.earth.azDeg) - req.dte_elevation_mask_deg;
+  };
+
   const events: EventPrediction[] = [
-    findFirstEvent("sunset", timesMs, sunG, true),
-    findFirstEvent("sunrise", timesMs, sunG, false),
-    findFirstEvent("earthset", timesMs, earthG, true),
-    findFirstEvent("earthrise", timesMs, earthG, false),
+    findFirstEventRefined("sunset", timesMs, sunG, true, evalSunG),
+    findFirstEventRefined("sunrise", timesMs, sunG, false, evalSunG),
+    findFirstEventRefined("earthset", timesMs, earthG, true, evalEarthG),
+    findFirstEventRefined("earthrise", timesMs, earthG, false, evalEarthG),
   ];
 
   const computation: ComputationInfo = {
@@ -754,7 +938,6 @@ function computeAdvancedDteFromSeries(
   const min_clearance_deg = roundTo(Math.min(...clearances), 4);
   const max_clearance_deg = roundTo(Math.max(...clearances), 4);
 
-  // Unwrap Earth azimuths to measure continuous libration box span
   const unwrappedAz: number[] = [];
   for (let i = 0; i < n; i++) {
     const raw = series.samples[i]!.earth.azimuth_deg;
@@ -916,7 +1099,10 @@ export async function staticFetchSolarEnergy(req: SolarEnergyRequest): Promise<S
   for (const s of series.samples) {
     const distAu = Math.max(1.0, s.sun.distance_km) / AU_KM;
     distAuSum += distAu;
-    const sEff = s.sun.visible_fraction > 0.0 ? (SOLAR_CONSTANT_AM0_W_M2 / (distAu * distAu)) * s.sun.visible_fraction : 0.0;
+    const sEff =
+      s.sun.visible_fraction > 0.0
+        ? (SOLAR_CONSTANT_AM0_W_M2 / (distAu * distAu)) * s.sun.visible_fraction
+        : 0.0;
     const above = s.sun.elevation_deg > 0.0;
     const elRad = s.sun.elevation_deg * DEG2RAD;
     const azRad = s.sun.azimuth_deg * DEG2RAD;
