@@ -38,6 +38,11 @@ jobs:
       - name: Run frontend tests & typecheck
         run: npm run typecheck && npm test
 
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - name: Build static bundle for GitHub Pages
         env:
           VITE_STATIC_MODE: "true"
