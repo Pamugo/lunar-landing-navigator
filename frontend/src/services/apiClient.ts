@@ -20,8 +20,20 @@ import type {
   VisibilityRequest,
   VisibilityTimeSeries,
 } from "../types/contracts";
+import {
+  staticCompareSites,
+  staticFetchDteAnalysis,
+  staticFetchHorizon,
+  staticFetchSolarEnergy,
+  staticFetchTerrainPatch,
+  staticFetchVisibility,
+  staticHealth,
+  staticListHardwareProfiles,
+  staticListSites,
+} from "./staticFallback";
 
 const API_BASE = "/api/v1";
+let backendUnavailable = import.meta.env.VITE_STATIC_MODE === "true";
 
 export class ApiError extends Error {
   constructor(
@@ -32,16 +44,43 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as ErrorResponse | null;
-    throw new ApiError(response.status, payload);
+async function requestWithFallback<T>(
+  path: string,
+  fallback: () => Promise<T>,
+  init?: RequestInit,
+): Promise<T> {
+  if (backendUnavailable) {
+    return fallback();
   }
-  return (await response.json()) as T;
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...init,
+    });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok) {
+      if (response.status === 404 || response.status >= 502) {
+        backendUnavailable = true;
+        return fallback();
+      }
+      const payload = (await response.json().catch(() => null)) as ErrorResponse | null;
+      throw new ApiError(response.status, payload);
+    }
+    if (!contentType.includes("application/json")) {
+      backendUnavailable = true;
+      return fallback();
+    }
+    return (await response.json()) as T;
+  } catch (err) {
+    if (init?.signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) {
+      throw err;
+    }
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    backendUnavailable = true;
+    return fallback();
+  }
 }
 
 /**
@@ -73,51 +112,55 @@ export function buildExternalPortalLinks(lat_deg: number, lon_deg: number): {
 
 export const apiClient = {
   health: (signal?: AbortSignal): Promise<HealthResponse> =>
-    request<HealthResponse>("/health", signal ? { signal } : undefined),
+    requestWithFallback<HealthResponse>("/health", staticHealth, signal ? { signal } : undefined),
 
   listSites: (signal?: AbortSignal): Promise<CuratedSite[]> =>
-    request<CuratedSite[]>("/sites", signal ? { signal } : undefined),
+    requestWithFallback<CuratedSite[]>("/sites", staticListSites, signal ? { signal } : undefined),
 
   listHardwareProfiles: (signal?: AbortSignal): Promise<HardwareProfile[]> =>
-    request<HardwareProfile[]>("/hardware-profiles", signal ? { signal } : undefined),
+    requestWithFallback<HardwareProfile[]>(
+      "/hardware-profiles",
+      staticListHardwareProfiles,
+      signal ? { signal } : undefined,
+    ),
 
   fetchHorizon: (payload: HorizonRequest, signal?: AbortSignal): Promise<HorizonProfile> =>
-    request<HorizonProfile>("/horizon", {
+    requestWithFallback<HorizonProfile>("/horizon", () => staticFetchHorizon(payload), {
       method: "POST",
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {}),
     }),
 
   fetchTerrainPatch: (payload: TerrainPatchRequest, signal?: AbortSignal): Promise<TerrainPatch> =>
-    request<TerrainPatch>("/terrain-patch", {
+    requestWithFallback<TerrainPatch>("/terrain-patch", () => staticFetchTerrainPatch(payload), {
       method: "POST",
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {}),
     }),
 
   fetchVisibility: (payload: VisibilityRequest, signal?: AbortSignal): Promise<VisibilityTimeSeries> =>
-    request<VisibilityTimeSeries>("/visibility", {
+    requestWithFallback<VisibilityTimeSeries>("/visibility", () => staticFetchVisibility(payload), {
       method: "POST",
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {}),
     }),
 
   compareSites: (payload: ComparisonRequest, signal?: AbortSignal): Promise<ComparisonResult> =>
-    request<ComparisonResult>("/compare", {
+    requestWithFallback<ComparisonResult>("/compare", () => staticCompareSites(payload), {
       method: "POST",
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {}),
     }),
 
   fetchSolarEnergy: (payload: SolarEnergyRequest, signal?: AbortSignal): Promise<SolarEnergySummary> =>
-    request<SolarEnergySummary>("/solar-energy", {
+    requestWithFallback<SolarEnergySummary>("/solar-energy", () => staticFetchSolarEnergy(payload), {
       method: "POST",
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {}),
     }),
 
   fetchDteAnalysis: (payload: VisibilityRequest, signal?: AbortSignal): Promise<AdvancedDteMetrics> =>
-    request<AdvancedDteMetrics>("/dte-analysis", {
+    requestWithFallback<AdvancedDteMetrics>("/dte-analysis", () => staticFetchDteAnalysis(payload), {
       method: "POST",
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {}),

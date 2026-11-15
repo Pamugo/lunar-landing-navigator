@@ -327,17 +327,18 @@ export function LunarGlobe3D({
     // 2. 100% Real Photographic Textures from NASA LROC WAC + LOLA 16-bit (?v=real_lroc_v3)
     const texLoader = new THREE.TextureLoader();
 
-    const moonAlbedo = texLoader.load(`/textures/moon_albedo_map.jpg?${TEXTURE_VERSION}`, () => {
+    const baseUrl = import.meta.env.BASE_URL;
+    const moonAlbedo = texLoader.load(`${baseUrl}textures/moon_albedo_map.jpg?${TEXTURE_VERSION}`, () => {
       configureTexture(moonAlbedo, true);
     });
     configureTexture(moonAlbedo, true);
 
-    const moonBump = texLoader.load(`/textures/moon_bump_lola.jpg?${TEXTURE_VERSION}`, () => {
+    const moonBump = texLoader.load(`${baseUrl}textures/moon_bump_lola.jpg?${TEXTURE_VERSION}`, () => {
       configureTexture(moonBump, false);
     });
     configureTexture(moonBump, false);
 
-    const moonNormal = texLoader.load(`/textures/moon_normal_lola.jpg?${TEXTURE_VERSION}`, () => {
+    const moonNormal = texLoader.load(`${baseUrl}textures/moon_normal_lola.jpg?${TEXTURE_VERSION}`, () => {
       configureTexture(moonNormal, false);
     });
     configureTexture(moonNormal, false);

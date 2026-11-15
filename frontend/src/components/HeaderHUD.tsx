@@ -175,7 +175,7 @@ export function HeaderHUD({
         <div className="brand-cluster">
           <div className="nasa-insignia-badge">
             <img
-              src={theme === "light" ? "/space-apps-malaga-logo-light.png" : "/space-apps-malaga-logo.png"}
+              src={`${import.meta.env.BASE_URL}${theme === "light" ? "space-apps-malaga-logo-light.png" : "space-apps-malaga-logo.png"}`}
               alt={t.header.insignia}
               className="nasa-insignia-logo"
             />
