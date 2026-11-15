@@ -1,19 +1,19 @@
 ---
-description: Audita el estado del proyecto frente a las bases del reto Lunar Landing Site Navigator usando la skill spaceapps-compliance.
+description: Audits project status against the Lunar Landing Site Navigator challenge rules using the spaceapps-compliance skill.
 allowed-tools: Read, Grep, Glob, Bash(python scripts/verify_environment.py:*), Bash(python -m unittest:*), Write(docs/audits/*)
 ---
 
 # /audit-challenge
 
-Actúa como `lead-architect-auditor`.
+Act as `lead-architect-auditor`.
 
-1. Lee `skills/spaceapps-compliance/SKILL.md` y `docs/CHALLENGE_SPEC.md`.
-2. Ejecuta las verificaciones automáticas:
+1. Read `skills/spaceapps-compliance/SKILL.md` and `docs/CHALLENGE_SPEC.md`.
+2. Run automated checks:
    - `python scripts/verify_environment.py`
    - `python -m unittest discover -s backend/tests -t backend -v`
-3. Para cada RF-01..RF-07 y RT-01..RT-04 busca evidencia concreta en el repositorio (archivo:línea, test, entrada de `docs/VALIDATION_LOG.md`).
-   Sin evidencia ⇒ el estado no puede ser ✅.
-4. Comprueba RT-03 con una búsqueda de `refract` en `backend/app/` y `frontend/src/`.
-5. Completa los checklists de datos/procedencia, entregables y criterios de evaluación de la skill.
-6. Escribe `docs/audits/AUDIT_<YYYY-MM-DD>.md` con el formato de la skill y muestra al usuario: tabla de estados, bloqueos y top-5 acciones.
-7. No modifiques código; solo el informe (y la columna *Estado* de `CHALLENGE_SPEC.md` si la evidencia lo respalda).
+3. For each RF-01..RF-07 and RT-01..RT-04, find concrete evidence in the repository (file:line, test, `docs/VALIDATION_LOG.md` entry).
+   Without evidence ⇒ status cannot be ✅.
+4. Verify RT-03 by searching `refract` across `backend/app/` and `frontend/src/`.
+5. Complete the data/provenance, deliverables, and judging criteria checklists in the skill.
+6. Write `docs/audits/AUDIT_<YYYY-MM-DD>.md` in the skill format and show the user: status table, blockers, and top-5 actions.
+7. Do not modify code; only write the report (and update the *Status* column of `CHALLENGE_SPEC.md` if backed by evidence).

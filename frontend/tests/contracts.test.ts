@@ -13,12 +13,12 @@ import { MISSION_TIME_PRESETS } from "../src/components/HeaderHUD";
 import { buildExternalPortalLinks } from "../src/services/apiClient";
 import { CONTRACT_VERSION } from "../src/types/contracts";
 
-describe("Lunar Landing Site Navigator — Contratos y Utilidades UI (v0.2.0)", () => {
-  it("expone CONTRACT_VERSION 0.2.0", () => {
+describe("Lunar Landing Site Navigator — Contracts & UI Utilities (v0.2.0)", () => {
+  it("exposes CONTRACT_VERSION 0.2.0", () => {
     expect(CONTRACT_VERSION).toBe("0.2.0");
   });
 
-  it("genera deep-links al nuevo dominio oficial de LROC QuickMap y NASA Moon Trek", () => {
+  it("generates deep links to the official LROC QuickMap domain and NASA Moon Trek", () => {
     const polar = buildExternalPortalLinks(-89.68, -166.0);
     expect(polar.quickmap_url.startsWith("https://quickmap.lroc.im-ldi.com/")).toBe(true);
     expect(polar.quickmap_url.includes("proj=17")).toBe(true);
@@ -28,13 +28,13 @@ describe("Lunar Landing Site Navigator — Contratos y Utilidades UI (v0.2.0)", 
     expect(eq.quickmap_url.includes("proj=16")).toBe(true);
   });
 
-  it("formatea correctamente cuentas atras de Sunset y Earthset", () => {
-    expect(formatDurationSeconds(null, true, 14)).toBe("> ventana (14 d)");
+  it("formats Sunset and Earthset countdowns properly", () => {
+    expect(formatDurationSeconds(null, true, 14)).toBe("> window (14 d)");
     expect(formatDurationSeconds(90060, false, 14)).toBe("1d 01h 01m");
     expect(formatDurationSeconds(7200, false, 14)).toBe("02h 00m");
   });
 
-  it("construye claves unicas para sitios curados y coordenadas personalizadas", () => {
+  it("builds unique keys for curated sites and custom coordinates", () => {
     expect(
       coordinateKey({ lat_deg: -89.68, lon_deg: -166.0, observer_height_m: 1.5, site_id: "shackleton-rim" }),
     ).toBe("shackleton-rim");
@@ -43,45 +43,45 @@ describe("Lunar Landing Site Navigator — Contratos y Utilidades UI (v0.2.0)", 
     ).toBe("custom_-85.1234_12.5000");
   });
 
-  it("calcula proyecciones trigonometricas de la Brujula Solar (polarToSvg y angularDifference)", () => {
-    // 0° Norte: arriba (x = cx, y = cy - r)
+  it("computes trigonometric projections for the Solar Compass (polarToSvg and angularDifference)", () => {
+    // 0 deg North: top (x = cx, y = cy - r)
     const north = polarToSvg(0, 80, 110, 110);
     expect(north.x).toBe(110);
     expect(north.y).toBe(30);
 
-    // 90° Este: derecha (x = cx + r, y = cy)
+    // 90 deg East: right (x = cx + r, y = cy)
     const east = polarToSvg(90, 80, 110, 110);
     expect(east.x).toBe(190);
     expect(east.y).toBe(110);
 
-    // 180° Sur: abajo (x = cx, y = cy + r)
+    // 180 deg South: bottom (x = cx, y = cy + r)
     const south = polarToSvg(180, 80, 110, 110);
     expect(south.x).toBe(110);
     expect(south.y).toBe(190);
 
-    // 270° Oeste: izquierda (x = cx - r, y = cy)
+    // 270 deg West: left (x = cx - r, y = cy)
     const west = polarToSvg(270, 80, 110, 110);
     expect(west.x).toBe(30);
     expect(west.y).toBe(110);
 
-    // Cardinales
+    // Cardinal directions
     expect(azimuthToCardinal(0)).toBe("N");
     expect(azimuthToCardinal(57)).toBe("ENE");
     expect(azimuthToCardinal(91)).toBe("E");
     expect(azimuthToCardinal(180)).toBe("S");
     expect(azimuthToCardinal(270)).toBe("W");
 
-    // Diferencia angular
+    // Angular difference
     expect(angularDifference(10, 350)).toBe(20);
     expect(angularDifference(90, 90)).toBe(0);
     expect(angularDifference(0, 180)).toBe(180);
   });
 
-  it("calcula sectores angulares de sombra topografica (computeShadowSectors)", () => {
-    // Si no hay muestras, devuelve sectores vacíos
+  it("computes angular topographic shadow sectors (computeShadowSectors)", () => {
+    // Empty array when there are no samples
     expect(computeShadowSectors([], null)).toEqual([]);
 
-    // Muestra simulada con Sol oculto a 180°
+    // Mock sample with Sun occluded at 180 deg
     const mockSample: any = {
       sun: {
         azimuth_deg: 180.0,
@@ -95,12 +95,12 @@ describe("Lunar Landing Site Navigator — Contratos y Utilidades UI (v0.2.0)", 
 
     const sectors = computeShadowSectors([mockSample], null);
     expect(sectors.length).toBeGreaterThan(0);
-    // El sector debe incluir 180°
+    // Sector must include 180 deg
     const sector180 = sectors.find((s) => s.startDeg <= 180 && s.endDeg >= 180);
     expect(sector180).toBeDefined();
   });
 
-  it("calcula veredicto y ranking de viabilidad segun el perfil de mision (computeViabilityAssessments)", () => {
+  it("computes viability verdict and ranking by mission profile (computeViabilityAssessments)", () => {
     const sites = [
       { coord: { lat_deg: -89.68, lon_deg: -166.0, observer_height_m: 1.5, site_id: "shackleton-rim" }, key: "shackleton-rim" },
       { coord: { lat_deg: -86.0, lon_deg: 2.7, observer_height_m: 3.5, site_id: "malapert-massif" }, key: "malapert-massif" },
@@ -137,32 +137,32 @@ describe("Lunar Landing Site Navigator — Contratos y Utilidades UI (v0.2.0)", 
       },
     };
 
-    // Comprueba configuracion de perfiles
+    // Verify profile configuration
     expect(MISSION_PROFILES.balanced.weights.solar).toBe(0.40);
     expect(MISSION_PROFILES.energy.weights.solar).toBe(0.60);
     expect(MISSION_PROFILES.comms.weights.dte).toBe(0.60);
 
-    // 1. Perfil Equilibrado (Artemis)
+    // 1. Balanced Profile (Artemis)
     const balancedAssessments = computeViabilityAssessments(sites, mockMetrics, mockSolar, "balanced");
     expect(balancedAssessments["shackleton-rim"]?.score).toBeGreaterThan(0);
     expect(balancedAssessments["malapert-massif"]?.score).toBeGreaterThan(0);
     expect(balancedAssessments["change-4"]?.score).toBeLessThan(balancedAssessments["shackleton-rim"]!.score);
-    // Uno de ellos debe ser el ganador
+    // One of them must be the winner
     const winnerCount = Object.values(balancedAssessments).filter((a) => a.isWinner).length;
     expect(winnerCount).toBe(1);
 
-    // 2. Perfil Prioridad Telecomunicaciones: Malapert (95% DTE) debe ganar a Shackleton (55% DTE)
+    // 2. Comms Priority Profile: Malapert (95% DTE) must beat Shackleton (55% DTE)
     const commsAssessments = computeViabilityAssessments(sites, mockMetrics, mockSolar, "comms");
     expect(commsAssessments["malapert-massif"]?.isWinner).toBe(true);
     expect(commsAssessments["malapert-massif"]?.rank).toBe(1);
 
-    // 3. Perfil Prioridad Energia: Shackleton (240 kWh/m2) debe ganar a Malapert (190 kWh/m2)
+    // 3. Energy Priority Profile: Shackleton (240 kWh/m2) must beat Malapert (190 kWh/m2)
     const energyAssessments = computeViabilityAssessments(sites, mockMetrics, mockSolar, "energy");
     expect(energyAssessments["shackleton-rim"]?.isWinner).toBe(true);
     expect(energyAssessments["shackleton-rim"]?.rank).toBe(1);
   });
 
-  it("proporciona 4 atajos de mision temporal con fechas UTC validas y parseables", () => {
+  it("provides 4 mission timeline presets with valid, parseable UTC dates", () => {
     expect(MISSION_TIME_PRESETS.length).toBe(4);
     const ids = MISSION_TIME_PRESETS.map((p) => p.id);
     expect(ids).toContain("now");

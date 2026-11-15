@@ -1,14 +1,14 @@
-"""Contrato de datos (fuente de verdad) entre backend y frontend.
+"""Data contract (source of truth) between backend and frontend.
 
-Propietario: lead-architect-auditor.
-Espejo obligatorio: frontend/src/types/contracts.ts (paridad comprobada por scripts/verify_environment.py).
+Owner: lead-architect-auditor.
+Mandatory mirror: frontend/src/types/contracts.ts (parity checked by scripts/verify_environment.py).
 
-Convenciones (ver AGENTS.md):
-- Angulos en grados decimales; distancias en metros salvo sufijo _km.
-- Tiempos en UTC ISO-8601 (sufijo Z).
-- Longitud este-positiva en [-180, 180]; marco selenografico MOON_ME.
-- Acimut desde el norte local, sentido horario, [0, 360).
-- Sin refraccion atmosferica en ningun calculo.
+Conventions (see AGENTS.md):
+- Angles in decimal degrees; distances in meters unless _km suffix.
+- Timestamps in UTC ISO-8601 (Z suffix).
+- East-positive longitude in [-180, 180]; MOON_ME selenographic frame.
+- Azimuth clockwise from local north, [0, 360).
+- Airless Moon: zero atmospheric bending in all calculations.
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ class ResolutionProfile(str, Enum):
     DESKTOP = "desktop"
 
 
-# --------------------------------------------------------------------------- sitios y hardware
+# --------------------------------------------------------------------------- sites and hardware
 class HardwareProfile(_Strict):
     id: str
     name: str
@@ -77,10 +77,10 @@ class HardwareProfile(_Strict):
 
 
 class LunarCoordinate(_Strict):
-    lat_deg: float = Field(ge=-90.0, le=90.0, description="Latitud planetocentrica MOON_ME [deg]")
-    lon_deg: float = Field(ge=-180.0, le=180.0, description="Longitud este-positiva MOON_ME [deg]")
-    observer_height_m: float = Field(default=2.0, ge=0.0, le=100.0, description="Altura sobre el DEM (mastil/panel) [m]")
-    site_id: str | None = Field(default=None, description="ID de sitio curado, si aplica")
+    lat_deg: float = Field(ge=-90.0, le=90.0, description="Planetocentric latitude MOON_ME [deg]")
+    lon_deg: float = Field(ge=-180.0, le=180.0, description="East-positive longitude MOON_ME [deg]")
+    observer_height_m: float = Field(default=2.0, ge=0.0, le=100.0, description="Height above DEM (mast/panel) [m]")
+    site_id: str | None = Field(default=None, description="Curated site ID, if applicable")
 
 
 class CuratedSite(_Strict):
@@ -89,7 +89,7 @@ class CuratedSite(_Strict):
     category: SiteCategory
     lat_deg: float = Field(ge=-90.0, le=90.0)
     lon_deg: float = Field(ge=-180.0, le=180.0)
-    elevation_m: float | None = Field(default=None, description="Altura sobre R=1737.4 km [m]; null si no muestreada")
+    elevation_m: float | None = Field(default=None, description="Elevation above R=1737.4 km [m]; null if unsampled")
     default_hardware_id: str
     region: str
     mission: str
@@ -101,14 +101,14 @@ class CuratedSite(_Strict):
     moontrek_url: str
 
 
-# --------------------------------------------------------------------------- tiempo
+# --------------------------------------------------------------------------- time window
 class TimeWindow(_Strict):
     start_utc: datetime
     end_utc: datetime
     step_minutes: float = Field(default=60.0, ge=1.0, le=1440.0)
 
 
-# --------------------------------------------------------------------------- horizonte y terreno 3D
+# --------------------------------------------------------------------------- horizon and 3D terrain
 class HorizonRequest(_Strict):
     site: LunarCoordinate
     azimuth_step_deg: float = Field(default=0.5, gt=0.0, le=5.0)
@@ -125,7 +125,7 @@ class HorizonProfile(_Strict):
     dem_product: str
     horizon_source: HorizonSource
     max_distance_km: float
-    truncated: bool = Field(description="True si algun rayo salio del DEM antes de max_distance_km")
+    truncated: bool = Field(description="True if any ray exited the DEM before max_distance_km")
 
 
 class TerrainPatchRequest(_Strict):
@@ -155,8 +155,8 @@ class BodyPosition(_Strict):
     elevation_deg: float
     distance_km: float
     angular_radius_deg: float
-    horizon_elevation_deg: float = Field(description="Elevacion del horizonte topografico en el acimut del cuerpo")
-    clearance_deg: float = Field(description="elevation_deg - horizon_elevation_deg (centro del disco)")
+    horizon_elevation_deg: float = Field(description="Topographic horizon elevation at the body azimuth")
+    clearance_deg: float = Field(description="elevation_deg - horizon_elevation_deg (disk center)")
     state: VisibilityState
     visible_fraction: float = Field(ge=0.0, le=1.0)
 
@@ -176,7 +176,7 @@ class VisibilityRequest(_Strict):
 
 class EventPrediction(_Strict):
     event: EventType
-    time_utc: datetime | None = Field(description="Instante del evento; null si fuera de la ventana")
+    time_utc: datetime | None = Field(description="Event timestamp; null if outside the window")
     seconds_from_reference: float | None
     beyond_window: bool
 
@@ -188,7 +188,7 @@ class ComputationInfo(_Strict):
     horizon_source: HorizonSource
     azimuth_step_deg: float
     max_distance_km: float
-    refraction: bool = Field(default=False, description="Siempre False: la Luna no tiene atmosfera")
+    refraction: bool = Field(default=False, description="Always False: the Moon is airless")
 
 
 class VisibilityTimeSeries(_Strict):
@@ -199,25 +199,25 @@ class VisibilityTimeSeries(_Strict):
     computation: ComputationInfo
 
 
-# --------------------------------------------------------------------------- telecomunicaciones DTE avanzadas (MATH_MODELS §6)
+# --------------------------------------------------------------------------- advanced DTE telecommunications (MATH_MODELS §6)
 class AdvancedDteMetrics(_Strict):
-    terrain_clearance_deg: float = Field(description="Margen angular instantaneo respecto al horizonte en la direccion de la Tierra [deg]")
-    min_clearance_deg: float = Field(description="Margen angular minimo respecto al horizonte durante la ventana [deg]")
-    max_clearance_deg: float = Field(description="Margen angular maximo respecto al horizonte durante la ventana [deg]")
-    earth_azimuth_span_deg: float = Field(description="Rango de variacion de acimut terrestre por libracion en la ventana [deg]")
-    earth_elevation_span_deg: float = Field(description="Rango de variacion de elevacion terrestre por libracion en la ventana [deg]")
-    libration_span_deg: float = Field(description="Rango angular total combinado de libracion [deg]")
-    earth_distance_km: float = Field(description="Distancia media Tierra-Luna durante la ventana [km]")
-    one_way_light_time_s: float = Field(description="Retardo de propagacion de luz en un sentido d / c [s]")
-    round_trip_time_s: float = Field(description="Tiempo de retardo de ida y vuelta (RTT) 2*d / c [s]")
-    fspl_s_band_db: float = Field(description="Perdida de propagacion en espacio libre en Banda S (2.2 GHz) [dB]")
-    fspl_x_band_db: float = Field(description="Perdida de propagacion en espacio libre en Banda X (8.4 GHz) [dB]")
-    fspl_ka_band_db: float = Field(description="Perdida de propagacion en espacio libre en Banda Ka (32.0 GHz) [dB]")
-    longest_comms_blackout_hours: float = Field(description="Duracion maxima continua de perdida de enlace DTE [horas]")
-    simultaneous_sun_earth_hours: float = Field(description="Horas netas de ventana simultanea con Sol y Tierra visibles [horas]")
+    terrain_clearance_deg: float = Field(description="Instantaneous angular clearance above the horizon toward Earth [deg]")
+    min_clearance_deg: float = Field(description="Minimum angular clearance above the horizon over the window [deg]")
+    max_clearance_deg: float = Field(description="Maximum angular clearance above the horizon over the window [deg]")
+    earth_azimuth_span_deg: float = Field(description="Earth azimuth libration variation range over the window [deg]")
+    earth_elevation_span_deg: float = Field(description="Earth elevation libration variation range over the window [deg]")
+    libration_span_deg: float = Field(description="Total combined libration angular span [deg]")
+    earth_distance_km: float = Field(description="Mean Earth-Moon distance over the window [km]")
+    one_way_light_time_s: float = Field(description="One-way light propagation delay d / c [s]")
+    round_trip_time_s: float = Field(description="Round-trip delay time (RTT) 2*d / c [s]")
+    fspl_s_band_db: float = Field(description="Free-space path loss in S-Band (2.2 GHz) [dB]")
+    fspl_x_band_db: float = Field(description="Free-space path loss in X-Band (8.4 GHz) [dB]")
+    fspl_ka_band_db: float = Field(description="Free-space path loss in Ka-Band (32.0 GHz) [dB]")
+    longest_comms_blackout_hours: float = Field(description="Maximum continuous DTE link loss duration [hours]")
+    simultaneous_sun_earth_hours: float = Field(description="Net simultaneous Sun and Earth visibility hours [hours]")
 
 
-# --------------------------------------------------------------------------- comparacion
+# --------------------------------------------------------------------------- comparison
 class SiteSummaryMetrics(_Strict):
     site: LunarCoordinate
     horizon_source: HorizonSource
@@ -233,7 +233,7 @@ class SiteSummaryMetrics(_Strict):
 
 
 class ComparisonRequest(_Strict):
-    sites: list[LunarCoordinate] = Field(min_length=1, max_length=4)
+    sites: list[LunarCoordinate] = Field(min_length=1, max_length=9)
     window: TimeWindow
     dte_elevation_mask_deg: float = Field(default=0.0, ge=-5.0, le=30.0)
     ephemeris: EphemerisKernel = EphemerisKernel.DE421
@@ -245,7 +245,7 @@ class ComparisonResult(_Strict):
     computation: ComputationInfo
 
 
-# --------------------------------------------------------------------------- sello cientifico y sistema
+# --------------------------------------------------------------------------- scientific seal and system
 class ScientificVerificationSeal(_Strict):
     validation_id: str
     reference_oracle: str
@@ -261,24 +261,24 @@ class ScientificVerificationSeal(_Strict):
     verified_at_utc: str
 
 
-# --------------------------------------------------------------------------- energia solar y acimut (MATH_MODELS §5)
+# --------------------------------------------------------------------------- solar energy and azimuth (MATH_MODELS §5)
 class SolarArchitectureEnergy(_Strict):
     architecture: str = Field(description="horizontal_panel | tracking_vertical_panel | fixed_vertical_panel")
-    azimuth_deg: float | None = Field(default=None, description="Acimut fijo del panel [0, 360) deg; null para tracking o horizontal")
-    total_energy_kwh_m2: float = Field(ge=0.0, description="Energia total acumulada [kWh/m^2]")
-    peak_flux_w_m2: float = Field(ge=0.0, description="Flujo de potencia pico instantanea [W/m^2]")
-    mean_flux_w_m2: float = Field(ge=0.0, description="Flujo de potencia medio durante la ventana [W/m^2]")
+    azimuth_deg: float | None = Field(default=None, description="Fixed panel azimuth [0, 360) deg; null for tracking or horizontal")
+    total_energy_kwh_m2: float = Field(ge=0.0, description="Total accumulated energy [kWh/m^2]")
+    peak_flux_w_m2: float = Field(ge=0.0, description="Peak instantaneous power flux [W/m^2]")
+    mean_flux_w_m2: float = Field(ge=0.0, description="Mean power flux over the window [W/m^2]")
 
 
 class OptimalAzimuthResult(_Strict):
-    optimal_panel_azimuth_deg: float = Field(ge=0.0, lt=360.0, description="Acimut optimo para panel vertical fijo [0, 359] deg")
-    optimal_fixed_energy_kwh_m2: float = Field(ge=0.0, description="Energia acumulada maxima lograda con el acimut optimo [kWh/m^2]")
-    azimuth_energy_curve_kwh_m2: list[float] = Field(description="Curva de energia para cada uno de los 360 grados de acimut [kWh/m^2]")
+    optimal_panel_azimuth_deg: float = Field(ge=0.0, lt=360.0, description="Optimal azimuth for fixed vertical panel [0, 359] deg")
+    optimal_fixed_energy_kwh_m2: float = Field(ge=0.0, description="Maximum accumulated energy achieved at optimal azimuth [kWh/m^2]")
+    azimuth_energy_curve_kwh_m2: list[float] = Field(description="Energy curve across all 360 azimuth degrees [kWh/m^2]")
 
 
 class SolarEnergySummary(_Strict):
-    solar_constant_am0_w_m2: float = Field(default=1368.0, description="Constante solar AM0 a 1 UA [W/m^2]")
-    mean_solar_distance_au: float = Field(gt=0.0, description="Distancia media heliocentrica durante la ventana [UA]")
+    solar_constant_am0_w_m2: float = Field(default=1368.0, description="AM0 solar constant at 1 AU [W/m^2]")
+    mean_solar_distance_au: float = Field(gt=0.0, description="Mean heliocentric distance over the window [AU]")
     horizontal_panel: SolarArchitectureEnergy
     tracking_vertical_panel: SolarArchitectureEnergy
     fixed_vertical_panel: SolarArchitectureEnergy
@@ -288,7 +288,7 @@ class SolarEnergySummary(_Strict):
 class SolarEnergyRequest(_Strict):
     site: LunarCoordinate
     window: TimeWindow
-    fixed_azimuth_deg: float = Field(default=0.0, ge=0.0, lt=360.0, description="Acimut del panel vertical fijo a evaluar [0, 360) deg")
+    fixed_azimuth_deg: float = Field(default=0.0, ge=0.0, lt=360.0, description="Fixed vertical panel azimuth to evaluate [0, 360) deg")
     ephemeris: EphemerisKernel = EphemerisKernel.DE421
 
 

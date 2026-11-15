@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Descarga reproducible y verificacion SHA-256 de kernels SPICE (NAIF/JPL) para Lunar Landing Site Navigator.
+"""Reproducible download and SHA-256 verification of SPICE kernels (NAIF/JPL) for Lunar Landing Site Navigator.
 
-Propietario: qa-verification-agent.
-Kernels descargados en data/ephemeris/:
-  - de421.bsp                    (posiciones planetarias y lunares 1900-2050)
-  - moon_pa_de421_1900-2050.bpc  (orientacion fisica / libracion lunar MOON_PA)
-  - moon_080317.tf               (definicion de marcos MOON_PA y MOON_ME_DE421)
-  - pck00008.tpc                 (constantes planetarias IAU requeridas por Skyfield)
+Owner: qa-verification-agent.
+Kernels downloaded into data/ephemeris/:
+  - de421.bsp                    (planetary and lunar ephemeris 1900-2050)
+  - moon_pa_de421_1900-2050.bpc  (lunar physical orientation / libration MOON_PA)
+  - moon_080317.tf               (MOON_PA and MOON_ME_DE421 frame definitions)
+  - pck00008.tpc                 (IAU planetary constants required by Skyfield)
 
-Uso:
+Usage:
     python scripts/fetch_kernels.py
 """
 
@@ -70,9 +70,9 @@ def main() -> int:
         dest = EPHEMERIS_DIR / filename
 
         if dest.is_file() and dest.stat().st_size >= min_bytes:
-            print(f"[OK] {filename} ya existe ({dest.stat().st_size} bytes)")
+            print(f"[OK] {filename} already exists ({dest.stat().st_size} bytes)")
         else:
-            print(f"[GET] Descargando {filename} desde {url} ...")
+            print(f"[GET] Downloading {filename} from {url} ...")
             req = urllib.request.Request(url, headers={"User-Agent": "LunarLandingNavigator/0.2 (NASA-SpaceApps)"})
             with urllib.request.urlopen(req, timeout=60) as resp, dest.open("wb") as out:
                 while True:
@@ -80,11 +80,11 @@ def main() -> int:
                     if not block:
                         break
                     out.write(block)
-            print(f"[OK] Descargado {filename} ({dest.stat().st_size} bytes)")
+            print(f"[OK] Downloaded {filename} ({dest.stat().st_size} bytes)")
 
         size = dest.stat().st_size
         if size < min_bytes:
-            raise RuntimeError(f"Kernel {filename} incompleto: {size} < {min_bytes} bytes")
+            raise RuntimeError(f"Kernel {filename} incomplete: {size} < {min_bytes} bytes")
 
         digest = sha256_file(dest)
         manifest_entries.append(
@@ -109,7 +109,7 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    print(f"[MANIFEST] Escrito {manifest_path.relative_to(ROOT)} con {len(manifest_entries)} kernels verificados.")
+    print(f"[MANIFEST] Wrote {manifest_path.relative_to(ROOT)} with {len(manifest_entries)} verified kernels.")
     return 0
 
 

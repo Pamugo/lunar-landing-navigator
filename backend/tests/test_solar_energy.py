@@ -1,12 +1,12 @@
-"""Tests unitarios y de validacion fisica del modelo de energia solar y acimut optimo (RF-05, MATH_MODELS §5).
+"""Unit and physical validation tests for the solar energy and optimal azimuth model (RF-05, MATH_MODELS §5).
 
-Propietario: qa-verification-agent.
-Verifica:
-  1. Irradiancia AM0 con ley del inverso del cuadrado y fraccion de disco visible (§5.1).
-  2. Paridad fisica de las tres arquitecturas de paneles: horizontal, tracking vertical y vertical fijo (§5.2).
-  3. Comprobacion de que un panel vertical polar capta decenas de veces mas energia que uno horizontal (§5.2).
-  4. Buscador del acimut optimo (0° a 359°) con oraculo analitico y en sitios polares reales (§5.4).
-  5. Endpoint FastAPI /api/v1/solar-energy.
+Owner: qa-verification-agent.
+Verifies:
+  1. AM0 irradiance with inverse-square law and visible disk fraction (§5.1).
+  2. Physical parity of the three panel architectures: horizontal, vertical tracking, and fixed vertical (§5.2).
+  3. Verification that a polar vertical panel captures dozens of times more energy than a horizontal one (§5.2).
+  4. Optimal azimuth finder (0° to 359°) with analytical oracle and on real polar sites (§5.4).
+  5. FastAPI /api/v1/solar-energy endpoint.
 """
 
 from __future__ import annotations
@@ -20,10 +20,8 @@ from app.models.schemas import (
     BodyPosition,
     ComputationInfo,
     EphemerisKernel,
-    HorizonProfile,
     HorizonSource,
     LunarCoordinate,
-    SolarArchitectureEnergy,
     SolarEnergyRequest,
     SolarEnergySummary,
     TimeWindow,
@@ -36,7 +34,6 @@ from app.services.visibility import (
     SOLAR_CONSTANT_AM0_W_M2,
     compute_solar_energy_analysis,
     compute_solar_irradiance_am0,
-    compute_visibility_timeseries,
     find_optimal_panel_azimuth,
 )
 
@@ -48,7 +45,7 @@ def _make_synthetic_sample(
     visible_frac: float = 1.0,
     distance_km: float = AU_KM,
 ) -> VisibilitySample:
-    """Construye una muestra sintetica controlada para pruebas analiticas de potencia solar."""
+    """Constructs a controlled synthetic sample for analytical solar power tests."""
     hor_el = 0.0
     clearance = el_deg - hor_el
     state = VisibilityState.VISIBLE if visible_frac >= 1.0 else (VisibilityState.PARTIAL if visible_frac > 0 else VisibilityState.OCCULTED)
@@ -76,15 +73,15 @@ def _make_synthetic_sample(
 
 
 class TestSolarEnergyPhysics(unittest.TestCase):
-    """Pruebas de fisica de irradiancia y arquitecturas de paneles."""
+    """Solar irradiance physics and panel architecture tests."""
 
     def test_solar_irradiance_am0_at_one_au(self) -> None:
-        """A 1 UA exacta y con disco 100% visible, S = 1368.0 W/m² exactos."""
+        """At exactly 1 AU and 100% visible disk, S = 1368.0 W/m² exact."""
         s = compute_solar_irradiance_am0(AU_KM, visible_fraction=1.0)
         self.assertAlmostEqual(s, SOLAR_CONSTANT_AM0_W_M2, places=4)
 
     def test_solar_irradiance_inverse_square_law(self) -> None:
-        """A 0.98 UA (perihelio) la irradiancia es superior a 1368 W/m²; a 1.02 UA (afelio) es inferior."""
+        """At 0.98 AU (perihelion) irradiance exceeds 1368 W/m²; at 1.02 AU (aphelion) it is lower."""
         s_peri = compute_solar_irradiance_am0(0.98 * AU_KM, visible_fraction=1.0)
         s_aph = compute_solar_irradiance_am0(1.02 * AU_KM, visible_fraction=1.0)
 
@@ -96,7 +93,7 @@ class TestSolarEnergyPhysics(unittest.TestCase):
         self.assertLess(s_aph, SOLAR_CONSTANT_AM0_W_M2)
 
     def test_solar_irradiance_occlusion_and_zero_conditions(self) -> None:
-        """Disco parcialmente ocultado escala linealmente; ocultacion total da 0 W/m²."""
+        """Partially occluded disk scales linearly; full occultation yields 0 W/m²."""
         s_half = compute_solar_irradiance_am0(AU_KM, visible_fraction=0.5)
         self.assertAlmostEqual(s_half, SOLAR_CONSTANT_AM0_W_M2 * 0.5, places=4)
 
@@ -107,7 +104,7 @@ class TestSolarEnergyPhysics(unittest.TestCase):
         self.assertEqual(s_neg, 0.0)
 
     def test_polar_vertical_panel_advantage_over_horizontal(self) -> None:
-        """En el polo lunar (e ≈ 1.5°), un panel vertical produce ~38 veces mas que uno horizontal plano."""
+        """At the lunar pole (e ≈ 1.5°), a vertical panel produces ~38x more than a flat horizontal panel."""
         t0 = datetime(2027, 1, 1, 0, 0, tzinfo=UTC)
         samples = [_make_synthetic_sample(t0, az_deg=90.0, el_deg=1.5, visible_frac=1.0)]
         comp = ComputationInfo(
@@ -132,10 +129,10 @@ class TestSolarEnergyPhysics(unittest.TestCase):
         p_vert = res.tracking_vertical_panel.peak_flux_w_m2
         p_fixed = res.fixed_vertical_panel.peak_flux_w_m2
 
-        # Analitico: p_horiz = 1368 * sin(1.5°) ≈ 35.81 W/m²; p_vert = 1368 * cos(1.5°) ≈ 1367.53 W/m²
+        # Analytical: p_horiz = 1368 * sin(1.5°) ≈ 35.81 W/m²; p_vert = 1368 * cos(1.5°) ≈ 1367.53 W/m²
         self.assertAlmostEqual(p_horiz, 1368.0 * math.sin(math.radians(1.5)), delta=0.5)
         self.assertAlmostEqual(p_vert, 1368.0 * math.cos(math.radians(1.5)), delta=0.5)
-        # Como el panel fijo apunta exactamente a 90° (donde esta el Sol), coincide con el tracking
+        # Since the fixed panel points at 90° (where the Sun is), it matches the tracking panel
         self.assertAlmostEqual(p_fixed, p_vert, delta=0.1)
 
         ratio = p_vert / p_horiz
@@ -143,9 +140,9 @@ class TestSolarEnergyPhysics(unittest.TestCase):
         self.assertLess(ratio, 40.0)
 
     def test_fixed_panel_cosine_azimuth_falloff(self) -> None:
-        """Un panel fijo orientado a 90° recibe 0 W cuando el Sol esta a 180° (ortogonal) o 270° (espalda)."""
+        """A fixed panel facing 90° receives 0 W when the Sun is at 180° (orthogonal) or 270° (behind)."""
         t0 = datetime(2027, 1, 1, 0, 0, tzinfo=UTC)
-        # Muestra 1: Sol a 90° (pleno frente); Muestra 2: Sol a 180° (lateral); Muestra 3: Sol a 270° (espalda)
+        # Sample 1: Sun at 90° (head-on); Sample 2: Sun at 180° (side); Sample 3: Sun at 270° (behind)
         samples = [
             _make_synthetic_sample(t0, az_deg=90.0, el_deg=2.0),
             _make_synthetic_sample(t0 + timedelta(hours=1), az_deg=180.0, el_deg=2.0),
@@ -168,22 +165,22 @@ class TestSolarEnergyPhysics(unittest.TestCase):
         )
 
         res = compute_solar_energy_analysis(series, fixed_azimuth_deg=90.0)
-        # En la muestra de 90° genera potencia completa; en 180° y 270° genera 0
+        # At the 90° sample it generates full power; at 180° and 270° it generates 0
         p_track_peak = res.tracking_vertical_panel.peak_flux_w_m2
         p_fixed_peak = res.fixed_vertical_panel.peak_flux_w_m2
         self.assertAlmostEqual(p_track_peak, p_fixed_peak, delta=0.5)
 
-        # La energia total del fijo debe ser inferior a la del tracking (porque solo capta una de las 3 muestras)
+        # Total fixed energy must be lower than tracking energy (captures only 1 of 3 samples)
         self.assertLess(res.fixed_vertical_panel.total_energy_kwh_m2, res.tracking_vertical_panel.total_energy_kwh_m2)
 
 
 class TestOptimalAzimuthSearch(unittest.TestCase):
-    """Pruebas del algoritmo de busqueda de acimut optimo (0° a 359°)."""
+    """Tests for the optimal azimuth search algorithm (0° to 359°)."""
 
     def test_optimal_azimuth_oracle_east_illumination(self) -> None:
-        """Si la iluminacion ocurre predominantemente hacia el Este (~90°), el acimut optimo debe ser 90°."""
+        """If illumination occurs predominantly toward East (~90°), optimal azimuth must be 90°."""
         t0 = datetime(2027, 1, 1, 0, 0, tzinfo=UTC)
-        # Sol estacionario o barriendo en torno a 90° (85°, 90°, 95°)
+        # Stationary or sweeping Sun around 90° (85°, 90°, 95°)
         samples = [
             _make_synthetic_sample(t0 + timedelta(hours=0), az_deg=85.0, el_deg=2.0),
             _make_synthetic_sample(t0 + timedelta(hours=1), az_deg=90.0, el_deg=2.0),
@@ -210,11 +207,11 @@ class TestOptimalAzimuthSearch(unittest.TestCase):
         self.assertEqual(opt.optimal_panel_azimuth_deg, 90.0)
         self.assertGreater(opt.optimal_fixed_energy_kwh_m2, 0.0)
 
-        # A 270° (opuesto) la energia acumulada debe ser 0.0
+        # At 270° (opposite) accumulated energy must be 0.0
         self.assertEqual(opt.azimuth_energy_curve_kwh_m2[270], 0.0)
 
     def test_optimal_azimuth_on_real_shackleton_rim_series(self) -> None:
-        """Evalua el buscador en una serie real generada en Shackleton Rim (7 dias de exploracion)."""
+        """Evaluates the finder on a real series generated at Shackleton Rim (7-day exploration)."""
         site = LunarCoordinate(lat_deg=-89.68, lon_deg=-166.0, site_id="shackleton-rim")
         req = SolarEnergyRequest(
             site=site,
@@ -232,16 +229,16 @@ class TestOptimalAzimuthSearch(unittest.TestCase):
         self.assertGreater(summary.mean_solar_distance_au, 0.98)
         self.assertLess(summary.mean_solar_distance_au, 1.02)
 
-        # En Shackleton el panel vertical con tracking siempre genera mas que el horizontal
+        # At Shackleton the tracking vertical panel always yields more than the horizontal one
         self.assertGreater(summary.tracking_vertical_panel.total_energy_kwh_m2, summary.horizontal_panel.total_energy_kwh_m2)
 
-        # El acimut optimo debe ser un grado discreto [0, 359]
+        # Optimal azimuth must be a discrete integer degree [0, 359]
         opt = summary.optimal_azimuth
         self.assertGreaterEqual(opt.optimal_panel_azimuth_deg, 0.0)
         self.assertLess(opt.optimal_panel_azimuth_deg, 360.0)
         self.assertEqual(len(opt.azimuth_energy_curve_kwh_m2), 360)
 
-        # La energia del optimo debe ser mayor o igual que la energia del panel fijo a 45°
+        # Optimal energy must be >= energy of the fixed panel at 45°
         self.assertGreaterEqual(opt.optimal_fixed_energy_kwh_m2, summary.fixed_vertical_panel.total_energy_kwh_m2)
 
 

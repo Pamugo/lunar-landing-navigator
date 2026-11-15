@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ComparisonGrid, coordinateKey } from "./components/ComparisonGrid";
 import { ElevationTimeline } from "./components/ElevationTimeline";
 import { type AppMode, HeaderHUD } from "./components/HeaderHUD";
 import { HorizonDome } from "./components/HorizonDome";
 import { LunarGlobe3D } from "./components/LunarGlobe3D";
-import { PolarMap2D } from "./components/PolarMap2D";
 import { Terrain3D } from "./components/Terrain3D";
+import { useLanguage } from "./i18n/LanguageContext";
+import { getLocalizedHardwareCopy, getLocalizedSiteCopy } from "./i18n/translations";
 import { apiClient, buildExternalPortalLinks } from "./services/apiClient";
 import type {
   CuratedSite,
@@ -23,7 +24,7 @@ import type {
   VisibilityTimeSeries,
 } from "./types/contracts";
 
-type VisualSubview = "globe3d" | "dome360" | "terrain3d" | "polar2d";
+type VisualSubview = "globe3d" | "dome360" | "terrain3d";
 type MobileTab = "visual" | "compare" | "timeline";
 
 const FALLBACK_SEAL: ScientificVerificationSeal = {
@@ -47,40 +48,40 @@ const FALLBACK_HARDWARE: HardwareProfile[] = [
     name: "CSA LEAP Micro-Rover / Surface Payload (0.5 m)",
     agency: "CSA (Canadian Space Agency)",
     observer_height_m: 0.5,
-    description_tech: "Microrover e instrumentos de superficie del programa LEAP de la CSA.",
-    description_edu: "Un mini-rover canadiense bajito (0,5 m).",
+    description_tech: "Microrover and surface instruments from the CSA LEAP program.",
+    description_edu: "A low-profile Canadian mini-rover (0.5 m).",
   },
   {
     id: "csa-utility-rover",
     name: "CSA Canadian Utility Rover Mast (1.5 m)",
     agency: "CSA (Canadian Space Agency)",
     observer_height_m: 1.5,
-    description_tech: "Mastil de navegacion y antena DTE del Canadian Utility Rover de la CSA.",
-    description_edu: "El rover utilitario de Canada (1,5 m) disenado para asistir a los astronautas.",
+    description_tech: "Navigation mast and DTE antenna on the CSA Canadian Utility Rover.",
+    description_edu: "Canada's utility rover (1.5 m) designed to assist astronauts.",
   },
   {
     id: "artemis-eva-mast",
     name: "Artemis Astronaut EVA / Standard Tripod (2.0 m)",
     agency: "NASA / Artemis",
     observer_height_m: 2.0,
-    description_tech: "Altura estandar (2.0 m) para visor de astronauta o tripode desplegable.",
-    description_edu: "La altura de los ojos de un astronauta o antena portatil (2 m).",
+    description_tech: "Standard height (2.0 m) for astronaut visor or deployable tripod.",
+    description_edu: "Eye level of an astronaut or portable antenna (2.0 m).",
   },
   {
     id: "artemis-ltv",
     name: "Artemis Lunar Terrain Vehicle / Rover High-Gain (2.2 m)",
     agency: "NASA / Commercial LTV",
     observer_height_m: 2.2,
-    description_tech: "Antena de alta ganancia en banda X/Ka sobre Lunar Terrain Vehicle.",
-    description_edu: "El vehiculo lunar de los astronautas con antena a 2,2 m.",
+    description_tech: "High-gain X/Ka-band antenna mounted on the Lunar Terrain Vehicle.",
+    description_edu: "The astronauts' lunar rover with a 2.2 m antenna mast.",
   },
   {
     id: "clps-lander-mast",
     name: "NASA CLPS Lander Top Deck / Solar Array (3.5 m)",
     agency: "NASA CLPS / Commercial",
     observer_height_m: 3.5,
-    description_tech: "Cubierta superior de lander comercial CLPS (ej. Nova-C Athena, 3.5 m).",
-    description_edu: "La parte alta de un modulo de aterrizaje comercial (3,5 m).",
+    description_tech: "Upper deck of commercial CLPS lander (e.g. Nova-C Athena, 3.5 m).",
+    description_edu: "The top deck of a commercial lunar lander (3.5 m).",
   },
 ];
 
@@ -94,11 +95,11 @@ const FALLBACK_SITES: CuratedSite[] = [
     elevation_m: 2120.0,
     default_hardware_id: "csa-utility-rover",
     region: "south_polar",
-    mission: "Region candidata Artemis III / CSA Utility Rover ops",
+    mission: "Artemis III Candidate Region / CSA Utility Rover ops",
     description_tech:
-      "Borde del crater Shackleton (D ~21 km, interior PSR). Puntos del borde con iluminacion > 80 % del ano; Sol rasante (|e| < ~2 deg); DTE modulado cada 27.21 d por libracion en latitud.",
+      "Shackleton crater rim (D ~21 km, PSR interior). Rim ridges illuminated > 80% of the year; grazing Sun (|e| < ~2 deg); DTE modulated every 27.21 d by latitudinal libration.",
     description_edu:
-      "El borde de un crater junto al polo sur. Aqui el Sol casi nunca se pone, pero siempre esta pegado al horizonte, como un atardecer eterno.",
+      "The rim of a crater right at the south pole. Here the Sun almost never sets, but always hugs the horizon like an eternal sunset.",
     source: "Bussey et al. (2010), Icarus / NASA Artemis III Candidate Regions",
     verification_status: "approximate_pending_lola",
     quickmap_url: "https://quickmap.lroc.im-ldi.com/?extent=-170.0,-89.88,-162.0,-89.48&proj=17",
@@ -113,11 +114,11 @@ const FALLBACK_SITES: CuratedSite[] = [
     elevation_m: 4650.0,
     default_hardware_id: "clps-lander-mast",
     region: "south_polar",
-    mission: "Region candidata Artemis III / Relay & DTE Prime Site",
+    mission: "Artemis III Candidate Region / Relay & DTE Prime Site",
     description_tech:
-      "Macizo de ~4.6-5.0 km de altitud orientado hacia la cara visible (lon ~2.7 E): ofrece visibilidad DTE casi ininterrumpida y amplias ventanas de iluminacion en su cresta.",
+      "Massif ~4.6-5.0 km tall facing the Earthward nearside (lon ~2.7 E): provides nearly uninterrupted DTE visibility and broad illumination windows on its ridge.",
     description_edu:
-      "Una montana enorme cerca del polo sur que 'mira' hacia la Tierra: ideal para hablar con casa sin satelites.",
+      "An enormous mountain near the south pole that 'faces' Earth: ideal for talking with home without relay satellites.",
     source: "NASA Artemis III candidate landing regions",
     verification_status: "approximate_pending_lola",
     quickmap_url: "https://quickmap.lroc.im-ldi.com/?extent=1.7,-86.3,3.7,-85.7&proj=17",
@@ -134,10 +135,10 @@ const FALLBACK_SITES: CuratedSite[] = [
     region: "south_polar",
     mission: "CLPS IM-2 (Intuitive Machines, Athena), 2025-03-06",
     description_tech:
-      "Meseta elevada (+5321 m sobre R=1737.4 km) del antiguo Leibnitz Beta. Sitio de aterrizaje CLPS real en el polo sur.",
+      "Elevated plateau (+5321 m above R=1737.4 km) on former Leibnitz Beta. Real CLPS landing site at the south pole.",
     description_edu:
-      "Una meseta muy alta cerca del polo sur donde aterrizo la nave comercial Athena en 2025.",
-    source: "LROC (posicion de Athena 84.7906 S, 29.1957 E; elevacion +5321 m)",
+      "A very high plateau near the south pole where the commercial lander Athena touched down in 2025.",
+    source: "LROC (Athena location 84.7906 S, 29.1957 E; elevation +5321 m)",
     verification_status: "verified_literature",
     quickmap_url: "https://quickmap.lroc.im-ldi.com/?extent=28.5,-85.0,29.9,-84.5&proj=17",
     moontrek_url: "https://trek.nasa.gov/moon/#v=0.1&x=29.1957&y=-84.7906&z=6&p=urn%3Aogc%3Adef%3Acrs%3AIAU2000%3A%3A30120",
@@ -151,17 +152,21 @@ const FALLBACK_SITES: CuratedSite[] = [
     elevation_m: -3850.0,
     default_hardware_id: "csa-leap-payload",
     region: "south_polar",
-    mission: "LCROSS (NASA), impacto 2009-10-09",
+    mission: "LCROSS (NASA), impact 2009-10-09",
     description_tech:
-      "Interior deprimido (-3.85 km) en sombra permanente (PSR) con hielo de agua confirmado por LCROSS.",
+      "Depressed interior (-3.85 km) in permanent shadow (PSR) with water ice confirmed by LCROSS.",
     description_edu:
-      "Un crater tan profundo que su fondo nunca ve el Sol. Alli la NASA encontro hielo de agua en 2009.",
+      "A crater so deep its floor never sees the Sun. NASA discovered water ice here in 2009.",
     source: "Colaprete et al. (2010), Science - LCROSS impact 84.675 S, 48.725 W",
     verification_status: "verified_literature",
     quickmap_url: "https://quickmap.lroc.im-ldi.com/?extent=-50.0,-85.0,-47.5,-84.3&proj=17",
     moontrek_url: "https://trek.nasa.gov/moon/#v=0.1&x=-48.725&y=-84.675&z=6&p=urn%3Aogc%3Adef%3Acrs%3AIAU2000%3A%3A30120",
   },
 ];
+
+function clampObserverHeight(h: number): number {
+  return Math.min(100.0, Math.max(0.0, Number(h.toFixed(1))));
+}
 
 function detectResolutionProfile(): ResolutionProfile {
   if (typeof window === "undefined") return "desktop";
@@ -171,9 +176,16 @@ function detectResolutionProfile(): ResolutionProfile {
 }
 
 export function App() {
+  const { lang, t } = useLanguage();
   const [mode, setMode] = useState<AppMode>("edu");
   const [visualSubview, setVisualSubview] = useState<VisualSubview>("globe3d");
   const [mobileTab, setMobileTab] = useState<MobileTab>("visual");
+
+  useEffect(() => {
+    if (mode === "edu" && mobileTab === "timeline") {
+      setMobileTab("visual");
+    }
+  }, [mode, mobileTab]);
 
   const [curatedSites, setCuratedSites] = useState<CuratedSite[]>(FALLBACK_SITES);
   const [hardwareProfiles, setHardwareProfiles] = useState<HardwareProfile[]>(FALLBACK_HARDWARE);
@@ -185,15 +197,12 @@ export function App() {
     [hardwareProfiles, selectedHardwareId],
   );
 
-  // Hasta 4 sitios comparados simultaneamente
-  const [selectedSites, setSelectedSites] = useState<LunarCoordinate[]>([
-    { lat_deg: -89.68, lon_deg: -166.0, observer_height_m: 1.5, site_id: "shackleton-rim" },
-    { lat_deg: -86.0, lon_deg: 2.7, observer_height_m: 1.5, site_id: "malapert-massif" },
-    { lat_deg: -84.675, lon_deg: -48.725, observer_height_m: 1.5, site_id: "cabeus-crater" },
-  ]);
+  // Up to 9 sites simultaneously in both Educational and Engineer modes (starts empty on startup)
+  const [selectedSites, setSelectedSites] = useState<LunarCoordinate[]>([]);
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
+  const maxCompareSites = 9;
 
-  const [startDateIso, setStartDateIso] = useState<string>("2027-01-01T00:00:00Z");
+  const [startDateIso, setStartDateIso] = useState<string>("2026-12-21T00:00:00Z");
   const [windowDays, setWindowDays] = useState<number>(14);
   const [sampleIndex, setSampleIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -205,7 +214,59 @@ export function App() {
   const [focusedHorizon, setFocusedHorizon] = useState<HorizonProfile | null>(null);
   const [focusedTerrain, setFocusedTerrain] = useState<TerrainPatch | null>(null);
 
-  // Cargar catalogo inicial y sello cientifico
+  // Resizable panel state (desktop split width % + optional explicit panel heights)
+  const [splitLeftPct, setSplitLeftPct] = useState<number>(43);
+  const [visualPanelHeight, setVisualPanelHeight] = useState<number | null>(null);
+  const [comparePanelHeight, setComparePanelHeight] = useState<number | null>(null);
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  const visualPanelRef = useRef<HTMLElement | null>(null);
+  const comparePaneRef = useRef<HTMLDivElement | null>(null);
+
+  const startResizeDrag = (
+    e: ReactPointerEvent<HTMLElement>,
+    opts: { axis: "x" | "y" | "xy-left" | "xy-right"; target?: "visual" | "compare"; cursor: string },
+  ) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const wsRect = workspaceRef.current?.getBoundingClientRect();
+    const targetEl = opts.target === "visual" ? visualPanelRef.current : comparePaneRef.current;
+    const startHeight = targetEl?.getBoundingClientRect().height ?? 520;
+    const startY = e.clientY;
+    const prevUserSelect = document.body.style.userSelect;
+    const prevCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = opts.cursor;
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      if ((opts.axis === "x" || opts.axis === "xy-left" || opts.axis === "xy-right") && wsRect && wsRect.width > 0) {
+        const minLeftPct = (300 / wsRect.width) * 100;
+        const maxLeftPct = Math.max(minLeftPct, 100 - (320 / wsRect.width) * 100);
+        const rawPct = ((moveEvent.clientX - wsRect.left) / wsRect.width) * 100;
+        const clampedPct = Math.max(Math.max(22, minLeftPct), Math.min(Math.min(75, maxLeftPct), rawPct));
+        setSplitLeftPct(Number(clampedPct.toFixed(2)));
+      }
+      if (opts.axis === "y" || opts.axis === "xy-left" || opts.axis === "xy-right") {
+        const rawHeight = Math.round(startHeight + (moveEvent.clientY - startY));
+        if (opts.target === "visual") {
+          setVisualPanelHeight(Math.max(360, Math.min(1100, rawHeight)));
+        } else if (opts.target === "compare") {
+          setComparePanelHeight(Math.max(260, Math.min(1400, rawHeight)));
+        }
+      }
+    };
+
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      document.body.style.userSelect = prevUserSelect;
+      document.body.style.cursor = prevCursor;
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+  };
+
+  // Load initial site catalog and scientific seal
   useEffect(() => {
     const ctrl = new AbortController();
     Promise.all([
@@ -220,35 +281,65 @@ export function App() {
     return () => ctrl.abort();
   }, []);
 
-  // Sincronizar observer_height_m cuando cambia el perfil de hardware seleccionado
+  // Sync observer_height_m when the selected hardware profile changes
   const handleHardwareChange = (hwId: string) => {
     setSelectedHardwareId(hwId);
     const hw = hardwareProfiles.find((h) => h.id === hwId);
     if (!hw) return;
+    const clampedH = clampObserverHeight(hw.observer_height_m);
     setSelectedSites((prev) =>
       prev.map((coord) => ({
         ...coord,
-        observer_height_m: hw.observer_height_m,
+        observer_height_m: clampedH,
       })),
     );
   };
 
+  // Ensure no site in state exceeds backend bounds [0.0 m .. 100.0 m]
+  useEffect(() => {
+    setSelectedSites((prev) => {
+      if (!prev.some((c) => c.observer_height_m > 100.0 || c.observer_height_m < 0.0)) {
+        return prev;
+      }
+      const fallbackH = clampObserverHeight(selectedHardware.observer_height_m);
+      return prev.map((c) =>
+        c.observer_height_m > 100.0 || c.observer_height_m < 0.0
+          ? { ...c, observer_height_m: fallbackH }
+          : c,
+      );
+    });
+  }, [selectedSites, selectedHardware.observer_height_m]);
+
+  const effectiveWindowDays = mode === "edu" ? 14 : windowDays;
+
   const timeWindow: TimeWindow = useMemo(() => {
+    const safeDays = Math.max(1, Math.min(365, effectiveWindowDays));
     const startMs = Date.parse(startDateIso);
-    const endMs = startMs + windowDays * 86400 * 1000;
+    const endMs = startMs + safeDays * 86400 * 1000;
+    const stepMinutes =
+      safeDays <= 3
+        ? 30
+        : safeDays <= 10
+          ? 60
+          : safeDays <= 30
+            ? 120
+            : safeDays <= 90
+              ? 240
+              : Math.min(1440, Math.max(240, Math.round((safeDays * 1440) / 360)));
     return {
       start_utc: new Date(startMs).toISOString().replace(".000Z", "Z"),
       end_utc: new Date(endMs).toISOString().replace(".000Z", "Z"),
-      step_minutes: windowDays <= 7 ? 60 : 120,
+      step_minutes: stepMinutes,
     };
-  }, [startDateIso, windowDays]);
+  }, [startDateIso, effectiveWindowDays]);
 
-  // Evaluar comparacion y series temporales cuando cambian sitios, altura o ventana
+  // Evaluate site comparison and time series when sites, height, or window change
   useEffect(() => {
     if (selectedSites.length === 0) {
       setMetricsByKey({});
       setSeriesByKey({});
       setSolarEnergyByKey({});
+      setHorizonByKey({});
       return;
     }
     const ctrl = new AbortController();
@@ -346,24 +437,28 @@ export function App() {
   }, [selectedSites, timeWindow]);
 
   const handleChangeSiteHeight = (index: number, newHeight_m: number) => {
+    const clamped = clampObserverHeight(newHeight_m);
     setSelectedSites((prev) =>
-      prev.map((coord, i) => (i === index ? { ...coord, observer_height_m: newHeight_m } : coord)),
+      prev.map((coord, i) => (i === index ? { ...coord, observer_height_m: clamped } : coord)),
     );
+    const matchingHw = hardwareProfiles.find((h) => Math.abs(h.observer_height_m - clamped) < 0.05);
+    if (matchingHw && index === focusedIndex) {
+      setSelectedHardwareId(matchingHw.id);
+    }
   };
 
-  const defaultPreviewSite: LunarCoordinate = {
-    lat_deg: -89.68,
-    lon_deg: -166.0,
-    observer_height_m: selectedHardware.observer_height_m,
-    site_id: "shackleton-rim",
-  };
-  const focusedSite = selectedSites[focusedIndex] ?? selectedSites[0] ?? defaultPreviewSite;
-  const focusedKey = coordinateKey(focusedSite);
-  const focusedSeries = seriesByKey[focusedKey] ?? null;
-  const focusedCurated = curatedSites.find((s) => s.id === focusedSite.site_id);
+  const focusedSite: LunarCoordinate | null = selectedSites[focusedIndex] ?? selectedSites[0] ?? null;
+  const focusedKey = focusedSite ? coordinateKey(focusedSite) : null;
+  const focusedSeries = focusedKey ? (seriesByKey[focusedKey] ?? null) : null;
+  const focusedCurated = focusedSite ? curatedSites.find((s) => s.id === focusedSite.site_id) : undefined;
 
-  // Cargar perfil de horizonte 360° y malla 3D adaptativa para el sitio enfocado
+  // Load 360° horizon profile and adaptive 3D mesh for the focused site
   useEffect(() => {
+    if (!focusedSite) {
+      setFocusedHorizon(null);
+      setFocusedTerrain(null);
+      return;
+    }
     const ctrl = new AbortController();
     const resProfile = detectResolutionProfile();
 
@@ -395,7 +490,7 @@ export function App() {
     return () => ctrl.abort();
   }, [focusedSite]);
 
-  // Bucle de animacion del scrubber temporal
+  // Animation loop for the time scrubber
   useEffect(() => {
     if (!isPlaying) return;
     const maxLen = focusedSeries?.samples.length ?? 1;
@@ -414,7 +509,7 @@ export function App() {
     return out;
   }, [seriesByKey, sampleIndex]);
 
-  const focusedSample = currentSampleByKey[focusedKey] ?? null;
+  const focusedSample = focusedKey ? (currentSampleByKey[focusedKey] ?? null) : null;
 
   const handleRemoveSite = (indexToRemove: number) => {
     setSelectedSites((prev) => {
@@ -443,43 +538,69 @@ export function App() {
     const newCoord: LunarCoordinate = {
       lat_deg: site.lat_deg,
       lon_deg: site.lon_deg,
-      observer_height_m: selectedHardware.observer_height_m,
+      observer_height_m: clampObserverHeight(selectedHardware.observer_height_m),
       site_id: site.id,
     };
     setSelectedSites((prev) => {
-      const next = prev.length >= 4 ? [...prev.slice(0, 3), newCoord] : [...prev, newCoord];
+      const next =
+        prev.length >= maxCompareSites
+          ? [...prev.slice(0, maxCompareSites - 1), newCoord]
+          : [...prev, newCoord];
       setFocusedIndex(next.length - 1);
       return next;
     });
   };
 
   const handleSelectCuratedFromMap = (siteId: string) => {
-    const existingIdx = selectedSites.findIndex((s) => s.site_id === siteId);
-    if (existingIdx !== -1) {
-      setFocusedIndex(existingIdx);
-      return;
-    }
     const site = curatedSites.find((s) => s.id === siteId);
-    if (site) handleToggleCuratedSite(site);
-  };
-
-  const handleAddCustomCoordinate = (lat_deg: number, lon_deg: number) => {
-    const customCoord: LunarCoordinate = {
-      lat_deg,
-      lon_deg,
-      observer_height_m: selectedHardware.observer_height_m,
-      site_id: null,
-    };
+    const defaultHeight = clampObserverHeight(selectedHardware.observer_height_m);
     setSelectedSites((prev) => {
-      const next = prev.length >= 4 ? [...prev.slice(0, 3), customCoord] : [...prev, customCoord];
+      const existingIdx = prev.findIndex((s) => s.site_id === siteId);
+      if (existingIdx !== -1) {
+        setFocusedIndex(existingIdx);
+        return prev;
+      }
+      if (!site) return prev;
+      const newCoord: LunarCoordinate = {
+        lat_deg: site.lat_deg,
+        lon_deg: site.lon_deg,
+        observer_height_m: defaultHeight,
+        site_id: site.id,
+      };
+      const next =
+        prev.length >= maxCompareSites
+          ? [...prev.slice(0, maxCompareSites - 1), newCoord]
+          : [...prev, newCoord];
       setFocusedIndex(next.length - 1);
       return next;
     });
   };
 
-  const focusedLinks = focusedCurated
-    ? { quickmap_url: focusedCurated.quickmap_url, moontrek_url: focusedCurated.moontrek_url }
-    : buildExternalPortalLinks(focusedSite.lat_deg, focusedSite.lon_deg);
+  const handleAddCustomCoordinate = (lat_deg: number, lon_deg: number) => {
+    const customCoord: LunarCoordinate = {
+      lat_deg: Number(lat_deg.toFixed(4)),
+      lon_deg: Number(lon_deg.toFixed(4)),
+      observer_height_m: clampObserverHeight(selectedHardware.observer_height_m),
+      site_id: null,
+    };
+    setSelectedSites((prev) => {
+      const next =
+        prev.length >= maxCompareSites
+          ? [...prev.slice(0, maxCompareSites - 1), customCoord]
+          : [...prev, customCoord];
+      setFocusedIndex(next.length - 1);
+      return next;
+    });
+  };
+
+  const focusedLinks = !focusedSite
+    ? null
+    : focusedCurated
+      ? { quickmap_url: focusedCurated.quickmap_url, moontrek_url: focusedCurated.moontrek_url }
+      : buildExternalPortalLinks(focusedSite.lat_deg, focusedSite.lon_deg);
+
+  const localizedFocusedSite = focusedCurated ? getLocalizedSiteCopy(focusedCurated, lang) : null;
+  const localizedSelectedHardware = getLocalizedHardwareCopy(selectedHardware, lang);
 
   return (
     <div className="hud-shell">
@@ -502,45 +623,51 @@ export function App() {
         }}
       />
 
-      {/* Pestañas tactiles para Movil y Tablet (< 1024px) */}
-      <nav className="glass-panel mobile-nav-tabs" aria-label="Navegacion tactil movil">
+      {/* Touch tabs for Mobile & Tablet (< 1024px) */}
+      <nav className="glass-panel mobile-nav-tabs" aria-label={t.app.mobileNavAria}>
         <button
           type="button"
           className={`mobile-tab-btn ${mobileTab === "visual" ? "active" : ""}`}
           onClick={() => setMobileTab("visual")}
         >
-          1. Globo 3D & Horizonte
+          {t.app.tabVisual}
         </button>
         <button
           type="button"
           className={`mobile-tab-btn ${mobileTab === "compare" ? "active" : ""}`}
           onClick={() => setMobileTab("compare")}
         >
-          2. Comparador ({selectedSites.length})
+          {t.app.tabCompare} ({selectedSites.length})
         </button>
-        <button
-          type="button"
-          className={`mobile-tab-btn ${mobileTab === "timeline" ? "active" : ""}`}
-          onClick={() => setMobileTab("timeline")}
-        >
-          3. Línea Temporal
-        </button>
+        {mode === "eng" && (
+          <button
+            type="button"
+            className={`mobile-tab-btn ${mobileTab === "timeline" ? "active" : ""}`}
+            onClick={() => setMobileTab("timeline")}
+          >
+            {t.app.tabTimeline}
+          </button>
+        )}
       </nav>
 
-      {/* Consola Central: Panel Izquierdo (Nucleo Visual 3D/2D) + Panel Derecho (Comparador Lado a Lado) */}
-      <main className="mission-workspace">
+      {/* Central Console: Left Panel (3D/2D Visual Core) + Resizable Splitter + Right Panel (Comparator) */}
+      <main
+        ref={workspaceRef}
+        className="mission-workspace"
+        style={{ "--visual-pane-width": `${splitLeftPct}%` } as CSSProperties}
+      >
         <section
-          className={`glass-panel visual-core-panel ${mobileTab !== "visual" ? "hide-on-mobile" : ""}`}
-          aria-label="Nucleo visual 3D y horizonte lunar"
+          ref={visualPanelRef}
+          className={`glass-panel visual-core-panel ${mobileTab !== "visual" ? "hide-on-mobile" : ""} ${visualPanelHeight !== null ? "is-custom-sized" : ""}`}
+          style={visualPanelHeight !== null ? { height: `${visualPanelHeight}px` } : undefined}
+          aria-label={t.app.visualCoreAria}
         >
           <div className="panel-header">
             <h2 className="panel-title">
-              {mode === "edu"
-                ? "Explorador Visual Lunar 3D y Horizonte"
-                : "3D Selenographic Visual Core & Local Horizon"}
+              {mode === "edu" ? t.app.visualTitleEdu : t.app.visualTitleEng}
             </h2>
 
-            <div className="subview-tabs" role="tablist" aria-label="Selector de vista espacial">
+            <div className="subview-tabs" role="tablist" aria-label={t.app.subviewTablistAria}>
               <button
                 type="button"
                 role="tab"
@@ -548,7 +675,7 @@ export function App() {
                 className={`subview-btn ${visualSubview === "globe3d" ? "active" : ""}`}
                 onClick={() => setVisualSubview("globe3d")}
               >
-                Globo Lunar 3D
+                {t.app.subviewGlobe}
               </button>
               <button
                 type="button"
@@ -557,7 +684,7 @@ export function App() {
                 className={`subview-btn ${visualSubview === "dome360" ? "active" : ""}`}
                 onClick={() => setVisualSubview("dome360")}
               >
-                Cúpula Horizonte 360°
+                {t.app.subviewDome}
               </button>
               <button
                 type="button"
@@ -566,16 +693,7 @@ export function App() {
                 className={`subview-btn ${visualSubview === "terrain3d" ? "active" : ""}`}
                 onClick={() => setVisualSubview("terrain3d")}
               >
-                Terreno 3D LOLA
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={visualSubview === "polar2d"}
-                className={`subview-btn ${visualSubview === "polar2d" ? "active" : ""}`}
-                onClick={() => setVisualSubview("polar2d")}
-              >
-                Mapa Polar 2D
+                {t.app.subviewTerrain}
               </button>
             </div>
           </div>
@@ -584,7 +702,9 @@ export function App() {
             <LunarGlobe3D
               sites={curatedSites}
               selectedSiteIds={selectedSites.map((s) => s.site_id).filter((id): id is string => Boolean(id))}
+              selectedSites={selectedSites}
               focusedSite={focusedSite}
+              focusedIndex={focusedIndex}
               currentSample={focusedSample}
               mode={mode}
               onSelectCuratedSite={handleSelectCuratedFromMap}
@@ -594,7 +714,16 @@ export function App() {
           )}
 
           {visualSubview === "dome360" && (
-            <HorizonDome profile={focusedHorizon} currentSample={focusedSample} mode={mode} />
+            <HorizonDome
+              profile={focusedHorizon}
+              currentSample={focusedSeries?.samples[0] ?? focusedSample}
+              mode={mode}
+              hasSelection={Boolean(focusedSite)}
+              curatedSites={curatedSites}
+              selectedSites={selectedSites}
+              focusedIndex={focusedIndex}
+              onSelectSiteIndex={setFocusedIndex}
+            />
           )}
 
           {visualSubview === "terrain3d" && (
@@ -602,67 +731,102 @@ export function App() {
               patch={focusedTerrain}
               currentSample={focusedSample}
               mode={mode}
+              hasSelection={Boolean(focusedSite)}
               onBackToGlobe={() => setVisualSubview("globe3d")}
+              curatedSites={curatedSites}
+              selectedSites={selectedSites}
+              focusedIndex={focusedIndex}
+              onSelectSiteIndex={setFocusedIndex}
             />
           )}
 
-          {visualSubview === "polar2d" && (
-            <PolarMap2D
-              sites={curatedSites}
-              selectedSiteIds={selectedSites.map((s) => s.site_id).filter((id): id is string => Boolean(id))}
-              focusedSite={focusedSite}
-              mode={mode}
-              onSelectCuratedSite={handleSelectCuratedFromMap}
-              onSelectCustomCoordinate={handleAddCustomCoordinate}
-            />
-          )}
-
-          {/* Ficha contextual del sitio enfocado + Propuesta de valor frente a Moon Trek */}
+          {/* Contextual card for the focused site + Value proposition vs Moon Trek */}
           <div className="mission-story-card">
-            <div className="mission-story-header">
-              <strong>
-                {focusedCurated
-                  ? `${focusedCurated.name} · ${focusedCurated.mission}`
-                  : `Coordenada Lunar Personalizada (${focusedSite.lat_deg.toFixed(4)}°, ${focusedSite.lon_deg.toFixed(4)}°)`}
-              </strong>
-              <span className="mono-telemetry" style={{ fontSize: "11px", color: "#93C5FD" }}>
-                Hardware: {selectedHardware.name}
-              </span>
-            </div>
+            {focusedSite && focusedLinks ? (
+              <>
+                <div className="mission-story-header">
+                  <strong>
+                    {localizedFocusedSite
+                      ? `${localizedFocusedSite.name} · ${localizedFocusedSite.mission}`
+                      : `${t.app.customCoordHeading} (${focusedSite.lat_deg.toFixed(4)}°, ${focusedSite.lon_deg.toFixed(4)}°)`}
+                  </strong>
+                  <span className="mono-telemetry" style={{ fontSize: "11px", color: "var(--accent-blue-text)" }}>
+                    {t.app.hardwareLabel} {localizedSelectedHardware.name}
+                  </span>
+                </div>
 
-            <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)" }}>
-              {mode === "edu"
-                ? focusedCurated?.description_edu ??
-                  "Punto personalizado sobre la superficie lunar. Observa cómo cambia la visibilidad del Sol y de la Tierra según la latitud y la altura del mástil."
-                : focusedCurated?.description_tech ??
-                  `Evaluación topográfica MOON_ME con altura de instrumento h₀ = ${focusedSite.observer_height_m.toFixed(1)} m (${selectedHardware.agency}).`}
-            </p>
+                {localizedFocusedSite && (
+                  <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)" }}>
+                    {mode === "edu"
+                      ? localizedFocusedSite.description_edu
+                      : localizedFocusedSite.description_tech}
+                  </p>
+                )}
 
-            <div className="portal-links-row">
-              <a
-                href={focusedLinks.quickmap_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="portal-link"
-              >
-                ↗ Explorar en LROC QuickMap (quickmap.lroc.im-ldi.com)
-              </a>
-              <a
-                href={focusedLinks.moontrek_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="portal-link"
-              >
-                ↗ Ver en NASA Moon Trek
-              </a>
-              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                ★ Acceso abierto a iluminación/horizonte LOLA (restringido a cuentas JPL en Moon Trek)
-              </span>
-            </div>
+                <div className="portal-links-row">
+                  <a
+                    href={focusedLinks.quickmap_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="portal-link"
+                  >
+                    {t.app.exploreQuickmap}
+                  </a>
+                  <a
+                    href={focusedLinks.moontrek_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="portal-link"
+                  >
+                    {t.app.viewMoontrek}
+                  </a>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mission-story-header">
+                  <strong>{t.app.noSiteSelectedTitle}</strong>
+                </div>
+                <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)" }}>
+                  {t.app.noSiteSelectedDesc}
+                </p>
+              </>
+            )}
           </div>
+
+          <div
+            className="panel-resize-handle-y"
+            role="separator"
+            aria-orientation="horizontal"
+            title={t.app.resizeHeightTitle}
+            onPointerDown={(e) => startResizeDrag(e, { axis: "y", target: "visual", cursor: "ns-resize" })}
+            onDoubleClick={() => setVisualPanelHeight(null)}
+          />
+          <div
+            className="panel-resize-handle-corner corner-br"
+            title={t.app.resizeCornerTitle}
+            onPointerDown={(e) => startResizeDrag(e, { axis: "xy-left", target: "visual", cursor: "nwse-resize" })}
+            onDoubleClick={() => {
+              setSplitLeftPct(43);
+              setVisualPanelHeight(null);
+            }}
+          />
         </section>
 
-        <div className={mobileTab !== "compare" ? "hide-on-mobile" : ""}>
+        <div
+          className="workspace-splitter-x"
+          role="separator"
+          aria-orientation="vertical"
+          title={t.app.resizeSplitterTitle}
+          onPointerDown={(e) => startResizeDrag(e, { axis: "x", cursor: "col-resize" })}
+          onDoubleClick={() => setSplitLeftPct(43)}
+        />
+
+        <div
+          ref={comparePaneRef}
+          className={`comparator-pane ${mobileTab !== "compare" ? "hide-on-mobile" : ""} ${comparePanelHeight !== null ? "is-custom-sized" : ""}`}
+          style={comparePanelHeight !== null ? { height: `${comparePanelHeight}px` } : undefined}
+        >
           <ComparisonGrid
             curatedSites={curatedSites}
             selectedSites={selectedSites}
@@ -678,39 +842,63 @@ export function App() {
             seriesByKey={seriesByKey}
             horizonByKey={horizonByKey}
             currentSampleByKey={currentSampleByKey}
-            windowDays={windowDays}
+            windowDays={effectiveWindowDays}
             startDateIso={startDateIso}
             mode={mode}
+            activeVisualSubview={visualSubview}
+            onShowInTerrain3D={(idx) => {
+              setFocusedIndex(idx);
+              setVisualSubview("terrain3d");
+              if (typeof window !== "undefined" && window.innerWidth < 1024) {
+                setMobileTab("visual");
+              }
+            }}
+          />
+          <div
+            className="panel-resize-handle-y"
+            role="separator"
+            aria-orientation="horizontal"
+            title={t.app.resizeHeightTitle}
+            onPointerDown={(e) => startResizeDrag(e, { axis: "y", target: "compare", cursor: "ns-resize" })}
+            onDoubleClick={() => setComparePanelHeight(null)}
+          />
+          <div
+            className="panel-resize-handle-corner corner-bl"
+            title={t.app.resizeCornerTitle}
+            onPointerDown={(e) => startResizeDrag(e, { axis: "xy-right", target: "compare", cursor: "nesw-resize" })}
+            onDoubleClick={() => {
+              setSplitLeftPct(43);
+              setComparePanelHeight(null);
+            }}
           />
         </div>
       </main>
 
-      {/* Panel Inferior Acoplado: Linea Temporal ECharts + Controles de Reproduccion */}
-      <div className={mobileTab !== "timeline" ? "hide-on-mobile" : ""}>
-        <ElevationTimeline
-          series={focusedSeries}
-          focusedSiteName={
-            focusedCurated
-              ? focusedCurated.name
-              : `Custom (${focusedSite.lat_deg.toFixed(2)}°, ${focusedSite.lon_deg.toFixed(2)}°)`
-          }
-          sampleIndex={sampleIndex}
-          onSampleIndexChange={setSampleIndex}
-          isPlaying={isPlaying}
-          onTogglePlay={() => setIsPlaying((prev) => !prev)}
-          windowDays={windowDays}
-          onWindowDaysChange={(d) => {
-            setWindowDays(d);
-            setSampleIndex(0);
-          }}
-          startDateIso={startDateIso}
-          onStartDateChange={(iso) => {
-            setStartDateIso(iso);
-            setSampleIndex(0);
-          }}
-          mode={mode}
-        />
-      </div>
+      {/* Docked Bottom Panel: ECharts Timeline + Playback Controls (Engineer Mode Only) */}
+      {mode === "eng" && (
+        <div className={mobileTab !== "timeline" ? "hide-on-mobile" : ""}>
+          <ElevationTimeline
+            series={focusedSeries}
+            focusedSiteName={
+              focusedSite
+                ? localizedFocusedSite
+                  ? localizedFocusedSite.name
+                  : `${t.app.customTimelineLabel} (${focusedSite.lat_deg.toFixed(2)}°, ${focusedSite.lon_deg.toFixed(2)}°)`
+                : null
+            }
+            selectedSites={selectedSites}
+            curatedSites={curatedSites}
+            focusedIndex={focusedIndex}
+            onSelectSiteIndex={setFocusedIndex}
+            sampleIndex={sampleIndex}
+            onSampleIndexChange={setSampleIndex}
+            isPlaying={isPlaying}
+            onTogglePlay={() => setIsPlaying((prev) => !prev)}
+            startDateIso={startDateIso}
+            mode={mode}
+          />
+        </div>
+      )}
     </div>
   );
 }

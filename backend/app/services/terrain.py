@@ -1,8 +1,8 @@
-"""Lectura de DEM LOLA en proyeccion estereografica polar sur, muestreo bilineal y mallas 3D adaptativas (RT-02, RF-01, RF-06).
+"""LOLA DEM reader in south polar stereographic projection, bilinear sampling, and adaptive 3D meshes (RT-02, RF-01, RF-06).
 
-Propietario: astro-terrain-specialist.
-Referencia matematica: docs/MATH_MODELS.md §0, §2.
-Procedimiento: skills/lola-topography-horizon/SKILL.md.
+Owner: astro-terrain-specialist.
+Math reference: docs/MATH_MODELS.md §0, §2.
+Procedure: skills/lola-topography-horizon/SKILL.md.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ RESOLUTION_GRID_MAP: dict[ResolutionProfile, int] = {
 }
 
 
-# --------------------------------------------------------------------------- proyeccion estereografica polar sur
+# --------------------------------------------------------------------------- south polar stereographic projection
 @overload
 def latlon_to_stereographic(lat_rad: float, lon_rad: float, radius_m: float = R_MOON_M) -> tuple[float, float]: ...
 
@@ -62,9 +62,9 @@ def latlon_to_stereographic(
     lon_rad: float | npt.NDArray[np.floating],
     radius_m: float = R_MOON_M,
 ) -> tuple[float, float] | tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """Convierte (lat_rad, lon_rad) selenograficos MOON_ME a (x_m, y_m) estereograficos polares sur.
+    """Convert MOON_ME selenographic (lat_rad, lon_rad) to south polar stereographic (x_m, y_m).
 
-    Referencia: skills/lola-topography-horizon/SKILL.md §2 y docs/MATH_MODELS.md §2.
+    Reference: skills/lola-topography-horizon/SKILL.md §2 and docs/MATH_MODELS.md §2.
     """
     if isinstance(lat_rad, np.ndarray) or isinstance(lon_rad, np.ndarray):
         lat_a = np.asarray(lat_rad, dtype=np.float64)
@@ -77,7 +77,7 @@ def latlon_to_stereographic(
 
 
 def stereographic_to_latlon(x_m: float, y_m: float, radius_m: float = R_MOON_M) -> tuple[float, float]:
-    """Inversa exacta de la proyeccion estereografica polar sur: (x_m, y_m) -> (lat_rad, lon_rad)."""
+    """Exact inverse of the south polar stereographic projection: (x_m, y_m) -> (lat_rad, lon_rad)."""
     rho = math.hypot(x_m, y_m)
     if rho == 0.0:
         return -math.pi / 2.0, 0.0
@@ -88,10 +88,10 @@ def stereographic_to_latlon(x_m: float, y_m: float, radius_m: float = R_MOON_M) 
 
 # --------------------------------------------------------------------------- portales externos y catalogos
 def build_quickmap_url(lat_deg: float, lon_deg: float) -> str:
-    """Genera deep-link al nuevo dominio oficial de NASA LROC QuickMap (Intuitive Machines)."""
+    """Generates a deep link to the official NASA LROC QuickMap domain (Intuitive Machines)."""
     if lat_deg <= -80.0:
         dlon, dlat = 1.5, 0.25
-        proj = 17  # South Polar Stereographic en QuickMap
+        proj = 17  # South Polar Stereographic in QuickMap
     else:
         dlon, dlat = 0.2, 0.2
         proj = 16  # Equirectangular global
@@ -106,7 +106,7 @@ def build_quickmap_url(lat_deg: float, lon_deg: float) -> str:
 
 
 def build_moontrek_url(lat_deg: float, lon_deg: float) -> str:
-    """Genera deep-link a NASA Moon Trek para las coordenadas dadas."""
+    """Generates a deep link to NASA Moon Trek for the given coordinates."""
     crs = "urn%3Aogc%3Adef%3Acrs%3AIAU2000%3A%3A30120" if lat_deg <= -80.0 else "urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A104903"
     zoom = 6 if lat_deg <= -80.0 else 7
     return f"https://trek.nasa.gov/moon/#v=0.1&x={lon_deg:.5f}&y={lat_deg:.5f}&z={zoom}&p={crs}"
@@ -118,41 +118,41 @@ def _read_curated_json() -> dict[str, object]:
 
 
 def load_curated_sites() -> list[CuratedSite]:
-    """Carga y valida los sitios curados desde data/curated_sites.json."""
+    """Loads and validates curated sites from data/curated_sites.json."""
     raw = _read_curated_json()
     sites_raw = raw.get("sites", [])
     return [CuratedSite.model_validate(item) for item in sites_raw]  # type: ignore[union-attr]
 
 
 def load_hardware_profiles() -> list[HardwareProfile]:
-    """Carga los perfiles de mastil/hardware (CSA Canadian Utility Rover, LEAP, CLPS, Artemis)."""
+    """Loads mast/hardware profiles (CSA Canadian Utility Rover, LEAP, CLPS, Artemis)."""
     raw = _read_curated_json()
     profiles_raw = raw.get("hardware_profiles", [])
     return [HardwareProfile.model_validate(item) for item in profiles_raw]  # type: ignore[union-attr]
 
 
-# --------------------------------------------------------------------------- generador de GeoTIFF polar calibrado y de test
+# --------------------------------------------------------------------------- calibrated & test polar GeoTIFF generator
 def create_synthetic_south_pole_dem(
     path: Path,
     half_extent_m: float = 340_000.0,
     pixel_size_m: float = 500.0,
     mode: str = "calibrated_south_pole",
 ) -> Path:
-    """Crea un GeoTIFF en proyeccion estereografica polar sur (R=1737.4 km).
+    """Creates a GeoTIFF in south polar stereographic projection (R=1737.4 km).
 
-    Modos soportados:
-      - 'flat_zero': esfera lisa h(x,y) = 0 m (oraculo de depresion del horizonte).
-      - 'linear_plane': plano inclinado z(x,y) = 100 + 0.01*x - 0.02*y (oraculo bilineal).
-      - 'ring_wall_15km_1000m': muralla circular de 1000 m a 15 km del polo sur (oraculo de obstaculo).
-      - 'calibrated_south_pole': relieve topografico polar sur de referencia (80S-90S) calibrado en las
-        coordenadas reales de Shackleton Rim (+2120 m, crater interior -4200 m), Malapert Massif (+4650 m),
-        Cabeus Crater (-3850 m con muralla de +1600 m), Mons Mouton (+5321 m) y Nobile Rim 1 (+1850 m).
+    Supported modes:
+      - 'flat_zero': smooth sphere h(x,y) = 0 m (horizon dip oracle).
+      - 'linear_plane': tilted plane z(x,y) = 100 + 0.01*x - 0.02*y (bilinear oracle).
+      - 'ring_wall_15km_1000m': 1000 m circular wall at 15 km from the south pole (obstacle oracle).
+      - 'calibrated_south_pole': reference south polar topographic relief (80S-90S) calibrated at real
+        coordinates of Shackleton Rim (+2120 m, crater floor -4200 m), Malapert Massif (+4650 m),
+        Cabeus Crater (-3850 m with +1600 m rim), Mons Mouton (+5321 m), and Nobile Rim 1 (+1850 m).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     n_px = round((2.0 * half_extent_m) / pixel_size_m)
     transform = from_origin(-half_extent_m, half_extent_m, pixel_size_m, pixel_size_m)
 
-    # Centros de pixel: x_c = -half_extent + (col + 0.5)*ps, y_c = half_extent - (row + 0.5)*ps
+    # Pixel centers: x_c = -half_extent + (col + 0.5)*ps, y_c = half_extent - (row + 0.5)*ps
     cols = np.arange(n_px, dtype=np.float64)
     rows = np.arange(n_px, dtype=np.float64)
     xs = -half_extent_m + (cols + 0.5) * pixel_size_m
@@ -169,27 +169,27 @@ def create_synthetic_south_pole_dem(
     elif mode == "calibrated_south_pole":
         zz64 = np.zeros_like(xx, dtype=np.float64)
 
-        # 1. Shackleton Crater (centro en 89.54S, 129.0E; D=21 km -> R_rim=10.5 km, fondo -4150 m, rim +2120 m)
+        # 1. Shackleton Crater (center 89.54S, 129.0E; D=21 km -> R_rim=10.5 km, floor -4150 m, rim +2120 m)
         sx, sy = latlon_to_stereographic(math.radians(-89.54), math.radians(129.0))
         sr = np.hypot(xx - sx, yy - sy)
-        # Borde elevado en torno a r = 10.5 km (pasa por Shackleton Rim 89.68S, -166E) y cavidad interior PSR
+        # Elevated rim around r = 10.5 km (passes through Shackleton Rim 89.68S, -166E) and PSR interior cavity
         zz64 += 2150.0 * np.exp(-((sr - 10_500.0) / 3_500.0) ** 2) - 4200.0 * np.exp(-((sr / 7_500.0) ** 4))
 
-        # 2. Malapert Massif (86.0S, 2.7E; macizo alargado de +4650 m orientado E-W)
+        # 2. Malapert Massif (86.0S, 2.7E; elongated +4650 m ridge oriented E-W)
         mx, my = latlon_to_stereographic(math.radians(-86.0), math.radians(2.7))
         zz64 += 4650.0 * np.exp(-(((xx - mx) / 18_000.0) ** 2 + ((yy - my) / 11_000.0) ** 2))
 
-        # 3. Cabeus Crater (84.675S, -48.725E; fondo PSR -3850 m rodeado de muralla anular de +1850 m a r=14 km)
+        # 3. Cabeus Crater (84.675S, -48.725E; -3850 m PSR floor ringed by +1850 m wall at r=14 km)
         cx, cy = latlon_to_stereographic(math.radians(-84.675), math.radians(-48.725))
         cr = np.hypot(xx - cx, yy - cy)
         zz64 += -3850.0 * np.exp(-((cr / 9_000.0) ** 2)) + 2600.0 * np.exp(-((cr - 13_500.0) / 4_000.0) ** 2)
 
-        # 4. Mons Mouton / Leibnitz Beta Plateau (84.7906S, 29.1957E; meseta amplia de +5321 m)
+        # 4. Mons Mouton / Leibnitz Beta Plateau (84.7906S, 29.1957E; broad +5321 m plateau)
         lbx, lby = latlon_to_stereographic(math.radians(-84.7906), math.radians(29.1957))
         lbr = np.hypot(xx - lbx, yy - lby)
         zz64 += 5321.0 * np.exp(-((lbr / 22_000.0) ** 4))
 
-        # 5. Nobile Rim 1 (85.4S, 35.0E; cresta de +1850 m junto a depresion de Nobile al este)
+        # 5. Nobile Rim 1 (85.4S, 35.0E; +1850 m ridge adjacent to Nobile depression to the east)
         nx, ny = latlon_to_stereographic(math.radians(-85.4), math.radians(35.0))
         nr = np.hypot(xx - nx, yy - ny)
         zz64 += 1850.0 * np.exp(-((nr / 12_000.0) ** 2)) - 2600.0 * np.exp(
@@ -198,7 +198,7 @@ def create_synthetic_south_pole_dem(
 
         zz = zz64.astype(np.float32)
     else:
-        raise ValueError(f"Modo sintetico desconocido: {mode}")
+        raise ValueError(f"Unknown synthetic mode: {mode}")
 
     with rasterio.open(
         path,
@@ -218,7 +218,7 @@ def create_synthetic_south_pole_dem(
 
 
 class LolaDemDataset:
-    """Envoltorio de lectura y muestreo bilineal vectorizado sobre un GeoTIFF LOLA polar sur."""
+    """Reader wrapper and vectorized bilinear sampler over a south polar LOLA GeoTIFF."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -234,12 +234,12 @@ class LolaDemDataset:
                 raw[np.isclose(raw, float(self.nodata))] = np.nan
             self._data: npt.NDArray[np.float64] = raw
 
-        # Pixel-is-area: centro del pixel (row, col) esta en:
+        # Pixel-is-area: pixel center (row, col) is at:
         # x = x_origin + (col + 0.5) * dx ; y = y_origin + (row + 0.5) * dy (con dy < 0)
         self._x0 = float(self.transform.c)
         self._dx = float(self.transform.a)
         self._y0 = float(self.transform.f)
-        self._dy = float(self.transform.e)  # negativo en GeoTIFF norte-arriba
+        self._dy = float(self.transform.e)  # negative in north-up GeoTIFF
 
     def contains_xy(self, x_m: float, y_m: float, margin_m: float = 0.0) -> bool:
         return bool(
@@ -252,7 +252,7 @@ class LolaDemDataset:
         x_m: float | npt.NDArray[np.floating],
         y_m: float | npt.NDArray[np.floating],
     ) -> float | npt.NDArray[np.float64]:
-        """Muestreo bilineal en coordenadas proyectadas (x_m, y_m) [m]. Fuera de rango devuelve NaN."""
+        """Bilinear sampling in projected coordinates (x_m, y_m) [m]. Out of range returns NaN."""
         scalar_input = not isinstance(x_m, np.ndarray) and not isinstance(y_m, np.ndarray)
         xa = np.atleast_1d(np.asarray(x_m, dtype=np.float64))
         ya = np.atleast_1d(np.asarray(y_m, dtype=np.float64))
@@ -287,9 +287,9 @@ class LolaDemDataset:
 
 @lru_cache(maxsize=1)
 def get_default_polar_dem() -> LolaDemDataset:
-    """Devuelve el dataset LOLA polar sur activo (creando el GeoTIFF calibrado si aun no existe)."""
+    """Returns the active south polar LOLA dataset (creating the calibrated GeoTIFF if not yet present)."""
     LOLA_RAW_DIR.mkdir(parents=True, exist_ok=True)
-    # Si hay un GeoTIFF externo suministrado por el usuario en data/lola_dem/raw/, priorizarlo
+    # Prioritize user-supplied external GeoTIFF in data/lola_dem/raw/ if present
     custom_tifs = [p for p in sorted(LOLA_RAW_DIR.glob("*.tif")) if p != DEFAULT_POLAR_DEM_PATH]
     if custom_tifs:
         return LolaDemDataset(custom_tifs[0])
@@ -309,9 +309,9 @@ def extract_terrain_patch(
     resolution_profile: ResolutionProfile = ResolutionProfile.DESKTOP,
     dem: LolaDemDataset | None = None,
 ) -> TerrainPatch:
-    """Extrae una malla de terreno local adaptada al dispositivo (mobile=32, tablet=48, desktop=96).
+    """Extracts a device-adaptive local terrain mesh (mobile=32, tablet=48, desktop=96).
 
-    Si el sitio cae fuera del DEM polar sur, degrada limpiamente a HorizonSource.SPHERICAL_ANALYTICAL.
+    If the site falls outside the south polar DEM, degrades cleanly to HorizonSource.SPHERICAL_ANALYTICAL.
     """
     active_dem = dem or get_default_polar_dem()
     grid_size = RESOLUTION_GRID_MAP[resolution_profile]
@@ -336,7 +336,7 @@ def extract_terrain_patch(
         source = HorizonSource.LOLA_DEM
         dem_name = active_dem.product_name
     else:
-        # Fallback analitico esferico suave alrededor de la cota nominal del sitio curado (o 0 m)
+        # Smooth analytical spherical fallback centered around curated site nominal elevation (or 0 m)
         site_elev = 0.0
         if site.site_id:
             for c in load_curated_sites():
@@ -345,7 +345,7 @@ def extract_terrain_patch(
                     break
         xx_local, yy_local = np.meshgrid(offsets, offsets)
         rr = np.hypot(xx_local, yy_local)
-        # Caida aparente por curvatura esferica para visualizacion local 3D: -r^2 / (2R)
+        # Apparent drop from spherical curvature for local 3D visualization: -r^2 / (2R)
         zz = site_elev - (rr**2) / (2.0 * R_MOON_M)
         source = HorizonSource.SPHERICAL_ANALYTICAL
         dem_name = "SPHERICAL_R1737400M"

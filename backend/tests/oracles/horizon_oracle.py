@@ -1,10 +1,10 @@
-"""Oraculos geometricos independientes para el horizonte lunar sin atmosfera.
+"""Independent geometric oracles for the airless lunar horizon.
 
-Propietario: qa-verification-agent.
-Derivados EXCLUSIVAMENTE de docs/MATH_MODELS.md (no del codigo de app/services).
-Solo stdlib (math) para que la suite sea verificable sin dependencias.
+Owner: qa-verification-agent.
+Derived EXCLUSIVELY from docs/MATH_MODELS.md (not from app/services code).
+Uses stdlib (math) only so the suite is verifiable with zero external dependencies.
 
-Todas las magnitudes internas en metros y radianes.
+All internal quantities in meters and radians.
 """
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ AU_KM: float = 149_597_870.7
 Vector3 = tuple[float, float, float]
 
 
-# --------------------------------------------------------------------------- geometria esferica
+# --------------------------------------------------------------------------- spherical geometry
 def central_angle(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Angulo central entre dos puntos (haversine) [rad]."""
+    """Central angle between two points (haversine) [rad]."""
     dlat = lat2 - lat1
     dlon = lon2 - lon1
     a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
@@ -31,7 +31,7 @@ def central_angle(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 def destination_point(lat: float, lon: float, azimuth: float, distance_m: float,
                       radius_m: float = R_MOON_M) -> tuple[float, float]:
-    """Punto alcanzado recorriendo un circulo maximo con acimut inicial dado (MATH_MODELS §2.3)."""
+    """Point reached along a great circle from a given initial azimuth (MATH_MODELS §2.3)."""
     delta = distance_m / radius_m
     lat2 = math.asin(math.sin(lat) * math.cos(delta) + math.cos(lat) * math.sin(delta) * math.cos(azimuth))
     lon2 = lon + math.atan2(math.sin(azimuth) * math.sin(delta) * math.cos(lat),
@@ -40,22 +40,22 @@ def destination_point(lat: float, lon: float, azimuth: float, distance_m: float,
 
 
 def initial_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Acimut inicial del circulo maximo de 1 a 2, desde el norte, horario, [0, 2pi) [rad]."""
+    """Initial great-circle bearing from point 1 to 2, clockwise from north, [0, 2pi) [rad]."""
     dlon = lon2 - lon1
     y = math.sin(dlon) * math.cos(lat2)
     x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
     return math.atan2(y, x) % (2 * math.pi)
 
 
-# --------------------------------------------------------------------------- elevacion del terreno
+# --------------------------------------------------------------------------- terrain elevation
 def horizon_elevation_naive(r0_m: float, ri_m: float, theta_rad: float) -> float:
-    """Formula literal: tan(gamma) = (r_i cos(theta) - r_0) / (r_i sin(theta))  (MATH_MODELS §2.1)."""
+    """Literal formula: tan(gamma) = (r_i cos(theta) - r_0) / (r_i sin(theta))  (MATH_MODELS §2.1)."""
     return math.atan2(ri_m * math.cos(theta_rad) - r0_m, ri_m * math.sin(theta_rad))
 
 
 def horizon_elevation_stable(h0_m: float, hi_m: float, theta_rad: float,
                              radius_m: float = R_MOON_M) -> float:
-    """Forma estable: atan2((h_i - h_0) - 2 r_i sin^2(theta/2), r_i sin(theta))  (MATH_MODELS §2.1)."""
+    """Stable form: atan2((h_i - h_0) - 2 r_i sin^2(theta/2), r_i sin(theta))  (MATH_MODELS §2.1)."""
     ri = radius_m + hi_m
     num = (hi_m - h0_m) - 2.0 * ri * math.sin(theta_rad / 2.0) ** 2
     return math.atan2(num, ri * math.sin(theta_rad))
@@ -72,9 +72,9 @@ def _dot(a: Vector3, b: Vector3) -> float:
 def elevation_azimuth_vector(lat0: float, lon0: float, h0_m: float,
                              lat1: float, lon1: float, h1_m: float,
                              radius_m: float = R_MOON_M) -> tuple[float, float]:
-    """Oraculo independiente por geometria vectorial 3D + base ENU (MATH_MODELS §1.4).
+    """Independent 3D vector geometry + ENU basis oracle (MATH_MODELS §1.4).
 
-    Devuelve (elevacion, acimut) en radianes; acimut desde el norte, horario, [0, 2pi).
+    Returns (elevation, azimuth) in radians; azimuth clockwise from north, [0, 2pi).
     """
     p0 = _to_cartesian(lat0, lon0, radius_m + h0_m)
     p1 = _to_cartesian(lat1, lon1, radius_m + h1_m)
@@ -89,33 +89,33 @@ def elevation_azimuth_vector(lat0: float, lon0: float, h0_m: float,
 
 
 def smooth_sphere_dip(h0_m: float, radius_m: float = R_MOON_M) -> float:
-    """Depresion del horizonte geometrico: arccos(R / (R + h0))  (MATH_MODELS §2.2.2)."""
+    """Geometric horizon dip: arccos(R / (R + h0))  (MATH_MODELS §2.2.2)."""
     return math.acos(radius_m / (radius_m + h0_m))
 
 
 def geometric_horizon_distance(h0_m: float, radius_m: float = R_MOON_M) -> float:
-    """Distancia superficial al punto de tangencia: R * arccos(R/(R+h0)) [m]."""
+    """Surface distance to the tangent point: R * arccos(R/(R+h0)) [m]."""
     return radius_m * smooth_sphere_dip(h0_m, radius_m)
 
 
 def max_line_of_sight_distance(h0_m: float, peak_h_m: float, radius_m: float = R_MOON_M) -> float:
-    """Distancia superficial maxima a la que una cima de altura H sobresale del horizonte de esfera lisa.
+    """Maximum surface distance at which a peak of height H rises above a smooth sphere horizon.
 
-    Exacta: R * (arccos(R/(R+h0)) + arccos(R/(R+H))). Aproximacion: sqrt(2Rh0) + sqrt(2RH).
+    Exact: R * (arccos(R/(R+h0)) + arccos(R/(R+H))). Approximation: sqrt(2Rh0) + sqrt(2RH).
     """
     return radius_m * (math.acos(radius_m / (radius_m + h0_m)) + math.acos(radius_m / (radius_m + peak_h_m)))
 
 
-# --------------------------------------------------------------------------- perfil de horizonte
+# --------------------------------------------------------------------------- horizon profile
 HeightFn = Callable[[float, float], float]
 
 
 def horizon_along_ray(lat0: float, lon0: float, h0_m: float, azimuth: float, height_fn: HeightFn,
                       max_distance_m: float, step_m: float,
                       radius_m: float = R_MOON_M) -> tuple[float, float]:
-    """Maximo de gamma a lo largo de un rayo de circulo maximo (MATH_MODELS §2.3).
+    """Maximum gamma along a great-circle ray (MATH_MODELS §2.3).
 
-    Devuelve (gamma_h [rad], distancia del obstaculo [m]).
+    Returns (gamma_h [rad], obstacle distance [m]).
     """
     best_gamma = -math.inf
     best_dist = 0.0
@@ -129,7 +129,7 @@ def horizon_along_ray(lat0: float, lon0: float, h0_m: float, azimuth: float, hei
     return best_gamma, best_dist
 
 
-# --------------------------------------------------------------------------- visibilidad
+# --------------------------------------------------------------------------- visibility
 def angular_radius(body_radius_km: float, distance_km: float) -> float:
     """alpha = arcsin(R_B / |rho|)  (MATH_MODELS §3.1) [rad]."""
     return math.asin(body_radius_km / distance_km)
@@ -145,7 +145,7 @@ def visibility_state(elevation: float, alpha: float, horizon: float) -> str:
 
 
 def disk_visible_fraction(elevation: float, alpha: float, horizon: float) -> float:
-    """Fraccion de disco uniforme sobre un horizonte localmente recto (MATH_MODELS §3.3)."""
+    """Uniform disk visible fraction above a locally straight horizon (MATH_MODELS §3.3)."""
     x = (horizon - elevation) / alpha
     if x <= -1.0:
         return 1.0
@@ -154,11 +154,11 @@ def disk_visible_fraction(elevation: float, alpha: float, horizon: float) -> flo
     return (math.acos(x) - x * math.sqrt(1.0 - x * x)) / math.pi
 
 
-# --------------------------------------------------------------------------- eventos
+# --------------------------------------------------------------------------- events
 def first_crossing_time(times_s: Sequence[float], values: Sequence[float]) -> float | None:
-    """Primer instante en que g pasa de > 0 a <= 0, por interpolacion lineal (MATH_MODELS §4).
+    """First instant where g crosses from > 0 to <= 0 via linear interpolation (MATH_MODELS §4).
 
-    Oraculo de referencia para la cuenta atras hasta Sunset/Earthset. None si no hay cruce.
+    Reference oracle for the Sunset/Earthset countdown. None if no crossing occurs.
     """
     for k in range(len(values) - 1):
         g0, g1 = values[k], values[k + 1]

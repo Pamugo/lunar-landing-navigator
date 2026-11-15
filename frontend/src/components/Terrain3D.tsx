@@ -1,18 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import type { TerrainPatch, VisibilitySample } from "../types/contracts";
+import type { CuratedSite, LunarCoordinate, TerrainPatch, VisibilitySample } from "../types/contracts";
 import type { AppMode } from "./HeaderHUD";
+import { useLanguage } from "../i18n/LanguageContext";
+import { getLocalizedSiteCopy, getShortSiteName } from "../i18n/translations";
 
 export interface Terrain3DProps {
   patch: TerrainPatch | null;
   currentSample: VisibilitySample | null;
   mode: AppMode;
+  hasSelection?: boolean;
   onBackToGlobe?: () => void;
+  curatedSites?: CuratedSite[];
+  selectedSites?: LunarCoordinate[];
+  focusedIndex?: number;
+  onSelectSiteIndex?: (index: number) => void;
 }
 
 /**
- * Interpolacion bicubica/bilineal suave sobre la matriz de elevaciones LOLA (n x n)
- * para construir la malla local 128x128 de alta densidad.
+ * Smooth bicubic/bilinear interpolation over the LOLA elevation matrix (n x n)
+ * to build a high-density 128x128 local mesh.
  */
 function sampleElevationSmooth(
   grid: number[][],
@@ -29,7 +36,7 @@ function sampleElevationSmooth(
   const y1 = Math.min(n - 1, y0 + 1);
   const tx = fx - x0;
   const ty = fy - y0;
-  // Suavizado Hermite de las coordenadas fraccionales para eliminar aristas entre celdas
+  // Hermite smoothing of fractional coordinates to eliminate cell seam artifacts
   const sx = tx * tx * (3.0 - 2.0 * tx);
   const sy = ty * ty * (3.0 - 2.0 * ty);
 
@@ -43,10 +50,20 @@ function sampleElevationSmooth(
   return top * (1 - sy) + bot * sy;
 }
 
-export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain3DProps) {
+export function Terrain3D({
+  patch,
+  currentSample,
+  mode,
+  hasSelection = true,
+  onBackToGlobe,
+  curatedSites = [],
+  selectedSites = [],
+  focusedIndex = 0,
+  onSelectSiteIndex,
+}: Terrain3DProps) {
+  const { lang, t } = useLanguage();
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sunLightRef = useRef<THREE.DirectionalLight | null>(null);
-  const [terrainShaderMode, setTerrainShaderMode] = useState<"regolith" | "hypsometric">("regolith");
   const [crossFadeOut, setCrossFadeOut] = useState<boolean>(false);
 
   const targetCamRef = useRef({ yaw: 0.45, pitch: 0.48, dist: 16.5 });
@@ -99,8 +116,8 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
     container.innerHTML = "";
     container.appendChild(renderer.domElement);
 
-    // Iluminacion espacial de alto contraste (tipo fotografia Apollo / LRO sin dispersion atmosferica)
-    const ambient = new THREE.HemisphereLight(0x1e293b, 0x020617, 0.08);
+    // High-contrast space illumination (Apollo / LRO style with zero atmospheric scattering)
+    const ambient = new THREE.HemisphereLight(0xcbd5e1, 0x475569, 0.42);
     scene.add(ambient);
 
     const sunLight = new THREE.DirectionalLight(0xfffcf5, 2.8);
@@ -119,7 +136,7 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
     scene.add(sunLight);
     sunLightRef.current = sunLight;
 
-    // Malla topografica 128x128 interpolada desde el parche LOLA real
+    // 128x128 topographic mesh interpolated from the real LOLA patch
     const rawN = patch.grid_size;
     const highResN = 128;
     const spanUnits = 18.0;
@@ -151,17 +168,10 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
         posAttr.setY(i, y);
 
         const t = Math.max(0, Math.min(1, (elev - minEl) / (maxEl - minEl)));
-
-        if (terrainShaderMode === "hypsometric") {
-          const r = 0.12 + 0.65 * t;
-          const g = 0.20 + 0.60 * t;
-          const b = 0.38 + 0.45 * (1.0 - t * 0.4);
-          colors.push(r, g, b);
-        } else {
-          // Reflectancia fotografica gris regolito Apollo/LRO realista
-          const baseGrey = 0.44 + 0.16 * t;
-          colors.push(baseGrey, baseGrey * 0.99, baseGrey * 0.97);
-        }
+        const r = 0.12 + 0.65 * t;
+        const g = 0.20 + 0.60 * t;
+        const b = 0.38 + 0.45 * (1.0 - t * 0.4);
+        colors.push(r, g, b);
       }
       posAttr.needsUpdate = true;
       geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -179,8 +189,8 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
     terrainMesh.castShadow = true;
     scene.add(terrainMesh);
 
-    // Marcador de precision del mastil del observador (CSA Rover / CLPS Lander) en (0, 0)
-    const mastHeightUnits = 0.35 + patch.site.observer_height_m * 0.18;
+    // Precision observer mast marker (CSA Rover / CLPS Lander / custom tower) at (0, 0)
+    const mastHeightUnits = 0.35 + Math.min(30.0, patch.site.observer_height_m) * 0.18;
     const mastGeo = new THREE.CylinderGeometry(0.045, 0.045, mastHeightUnits, 14);
     const mastMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
     const mastMesh = new THREE.Mesh(mastGeo, mastMat);
@@ -220,7 +230,7 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      // Si el usuario aleja la rueda del raton (zoom out) en el limite superior, regresar de forma fluida al Globo 3D
+      // If the user scrolls out at the upper zoom limit, smoothly return to the 3D Globe
       if (e.deltaY > 0 && targetCamRef.current.dist >= 32.5) {
         zoomOutCounterRef.current += 1;
         if (zoomOutCounterRef.current >= 2) {
@@ -265,11 +275,15 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
       if (!container) return;
       const w = container.clientWidth || 480;
       const h = container.clientHeight || 380;
+      if (w <= 0 || h <= 0) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
     window.addEventListener("resize", onResize);
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => onResize()) : null;
+    resizeObserver?.observe(container);
 
     return () => {
       cancelAnimationFrame(animId);
@@ -278,6 +292,7 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
       window.removeEventListener("pointerup", onUp);
       dom.removeEventListener("wheel", onWheel);
       window.removeEventListener("resize", onResize);
+      resizeObserver?.disconnect();
       geo.dispose();
       mat.dispose();
       mastGeo.dispose();
@@ -286,7 +301,7 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
       beaconMat.dispose();
       renderer.dispose();
     };
-  }, [patch, terrainShaderMode]);
+  }, [patch]);
 
   useEffect(() => {
     if (!currentSample || !sunLightRef.current) return;
@@ -302,8 +317,10 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
 
   if (!patch) {
     return (
-      <div className="viewport-stage" style={{ display: "grid", placeItems: "center" }}>
-        <span className="mono-telemetry">Cargando malla topográfica 3D LOLA (128×128)...</span>
+      <div className="viewport-stage" style={{ display: "grid", placeItems: "center", padding: "16px", textAlign: "center" }}>
+        <span className="mono-telemetry" style={{ color: "var(--text-secondary)" }}>
+          {hasSelection ? t.terrain.loading : t.terrain.noSiteSelected}
+        </span>
       </div>
     );
   }
@@ -311,80 +328,118 @@ export function Terrain3D({ patch, currentSample, mode, onBackToGlobe }: Terrain
   return (
     <div
       className="viewport-stage"
-      aria-label="Superficie topografica 3D local LOLA 128x128 con sombreado fotorrealista de regolito"
+      aria-label={t.terrain.stageAria}
       style={{
         opacity: crossFadeOut ? 0.08 : 1.0,
         transition: "opacity 0.2s ease-out",
       }}
     >
-      <div className="viewport-overlay-top">
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-          {onBackToGlobe && (
+      <div className="viewport-overlay-top" style={{ flexDirection: "column", alignItems: "stretch", gap: "6px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+            {onBackToGlobe && (
+              <button
+                type="button"
+                className="hud-btn-mini"
+                onClick={triggerReturnToGlobe}
+                style={{ borderColor: "rgba(56, 189, 248, 0.55)", color: "#38bdf8" }}
+              >
+                {t.terrain.backToGlobe}
+              </button>
+            )}
+            {mode === "eng" && (
+              <>
+                <span className="hud-pill mono-telemetry">
+                  {t.terrain.meshBadgePrefix} {patch.grid_size}×{patch.grid_size}{t.terrain.meshBadgeMid} {patch.step_m.toFixed(0)} {t.terrain.meshCellUnit}
+                </span>
+                <span className="hud-pill mono-telemetry">
+                  [{patch.min_elevation_m.toFixed(0)} m, {patch.max_elevation_m.toFixed(0)} m]
+                </span>
+              </>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
             <button
               type="button"
               className="hud-btn-mini"
-              onClick={triggerReturnToGlobe}
-              style={{ borderColor: "rgba(56, 189, 248, 0.55)", color: "#38bdf8" }}
+              onClick={() => handleZoomStep("in")}
+              title={t.terrain.zoomInTitle}
             >
-              ← Volver al Globo 3D
+              {t.terrain.zoomInBtn}
             </button>
-          )}
-          <span className="hud-pill mono-telemetry">
-            Malla 3D HD: 128×128 (DEM LOLA {patch.grid_size}×{patch.grid_size}, {patch.step_m.toFixed(0)} m/celda)
-          </span>
-          <span className="hud-pill mono-telemetry">
-            [{patch.min_elevation_m.toFixed(0)} m, {patch.max_elevation_m.toFixed(0)} m]
-          </span>
+            <button
+              type="button"
+              className="hud-btn-mini"
+              onClick={() => handleZoomStep("out")}
+              title={t.terrain.zoomOutTitle}
+            >
+              {t.terrain.zoomOutBtn}
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="hud-btn-mini"
-            onClick={() => handleZoomStep("in")}
-            title="Acercar cámara a la superficie local"
+        {selectedSites.length > 0 && onSelectSiteIndex && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              flexWrap: "wrap",
+              background: "rgba(11, 15, 25, 0.88)",
+              backdropFilter: "blur(8px)",
+              padding: "5px 9px",
+              borderRadius: "6px",
+              border: "1px solid rgba(56, 189, 248, 0.28)",
+            }}
           >
-            ＋ Zoom
-          </button>
-          <button
-            type="button"
-            className="hud-btn-mini"
-            onClick={() => handleZoomStep("out")}
-            title="Alejar cámara (al alejar al máximo vuelve al Globo Lunar 3D)"
-          >
-            － Zoom
-          </button>
-          <button
-            type="button"
-            className={`hud-btn-mini ${terrainShaderMode === "regolith" ? "active" : ""}`}
-            onClick={() => setTerrainShaderMode("regolith")}
-            title="Sombreado fotorrealista de regolito lunar con sombras de relieve reales"
-          >
-            Vista Real (Regolito)
-          </button>
-          <button
-            type="button"
-            className={`hud-btn-mini ${terrainShaderMode === "hypsometric" ? "active" : ""}`}
-            onClick={() => setTerrainShaderMode("hypsometric")}
-            title="Gradiente hipsométrico de elevación topográfica LOLA"
-          >
-            Capa Científica (Altimetría LOLA)
-          </button>
-        </div>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#93C5FD" }}>
+              {t.terrain.siteSelectorLabel}
+            </span>
+            {selectedSites.map((coord, idx) => {
+              const cur = curatedSites.find((s) => s.id === coord.site_id);
+              const label = cur
+                ? getShortSiteName(cur, lang)
+                : `${t.terrain.customSiteShort} (${coord.lat_deg.toFixed(2)}°, ${coord.lon_deg.toFixed(2)}°)`;
+              const fullSiteName = cur ? getLocalizedSiteCopy(cur, lang).name : label;
+              const isActive = idx === focusedIndex;
+              return (
+                <button
+                  key={`${coord.site_id ?? "custom"}_${coord.lat_deg}_${coord.lon_deg}_${idx}`}
+                  type="button"
+                  className={`hud-btn-mini ${isActive ? "active" : ""}`}
+                  style={
+                    isActive
+                      ? {
+                          background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
+                          color: "#FFFFFF",
+                          borderColor: "#34D399",
+                          fontWeight: 700,
+                        }
+                      : undefined
+                  }
+                  onClick={() => onSelectSiteIndex(idx)}
+                  title={`${t.terrain.showSiteTitlePrefix} ${fullSiteName}${t.terrain.showSiteTitleSuffix}`}
+                >
+                  {isActive ? "👁️ " : ""}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div ref={mountRef} style={{ width: "100%", height: "100%" }} />
 
       <div className="viewport-overlay-bottom">
         <span className="hud-pill">
-          Mástil activo: <strong className="mono-telemetry">{patch.site.observer_height_m.toFixed(1)} m</strong>
+          {t.terrain.activeMastLabel} <strong className="mono-telemetry">{patch.site.observer_height_m.toFixed(1)} m</strong>
         </span>
         <span className="hud-pill">
-          {terrainShaderMode === "regolith"
-            ? "Aleja la rueda del ratón (Zoom Out) para ascender automáticamente al Globo Lunar 3D"
-            : mode === "edu"
-              ? "Las zonas azules son cráteres profundos; las doradas son cumbres iluminadas"
-              : `Fuente: ${patch.dem_product} (${patch.horizon_source})`}
+          {mode === "edu"
+            ? t.terrain.eduColorNote
+            : `${t.terrain.engSourcePrefix} ${patch.dem_product} (${patch.horizon_source})`}
         </span>
       </div>
     </div>

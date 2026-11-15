@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Frontend interactivo del Lunar Landing Site Navigator (NASA Space Apps 2026)",
+  "description": "Interactive frontend for the Lunar Landing Site Navigator (NASA Space Apps 2026)",
   "engines": {
     "node": ">=20.19"
   },

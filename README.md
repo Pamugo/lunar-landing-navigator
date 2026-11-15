@@ -1,44 +1,44 @@
 # Lunar Landing Site Navigator — NASA Space Apps Challenge 2026
 
-Aplicación interactiva de planificación de misiones y divulgación científica que traduce **efemérides lunares JPL (`de421.bsp` con libración física `MOON_ME_DE421`)** y **topografía real del Lunar Orbiter Laser Altimeter (LOLA)** en visualizaciones comparables para evaluar sitios y fechas de alunizaje en el Polo Sur de la Luna, sin atmósfera (`R = 1737.4 km`, `APPARENT = AIRLESS`).
+Interactive mission-planning and science outreach application that translates **JPL lunar ephemerides (`de421.bsp` with physical libration `MOON_ME_DE421`)** and **real Lunar Orbiter Laser Altimeter (LOLA) topography** into comparable visualizations for evaluating landing sites and dates at the Moon's South Pole, airless (`R = 1737.4 km`, `APPARENT = AIRLESS`).
 
-- **Especificación del Reto y Recursos Oficiales**: [docs/CHALLENGE_SPEC.md](docs/CHALLENGE_SPEC.md)
-- **Arquitectura y Contratos JSON (`v0.2.0`)**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **Modelos Físico-Matemáticos**: [docs/MATH_MODELS.md](docs/MATH_MODELS.md)
-- **Identidad Visual ("NASA Mission Control Minimal")**: [docs/UI_DESIGN.md](docs/UI_DESIGN.md)
-- **Registro de Validación Científica (`<= 0.000009°` vs JPL Horizons)**: [docs/VALIDATION_LOG.md](docs/VALIDATION_LOG.md)
-- **Reglas Globales Multi-Agente**: [AGENTS.md](AGENTS.md)
+- **Challenge Specification & Official Resources**: [docs/CHALLENGE_SPEC.md](docs/CHALLENGE_SPEC.md)
+- **Architecture & JSON Contracts (`v0.2.0`)**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Physical & Mathematical Models**: [docs/MATH_MODELS.md](docs/MATH_MODELS.md)
+- **Visual Identity ("NASA Mission Control Minimal")**: [docs/UI_DESIGN.md](docs/UI_DESIGN.md)
+- **Scientific Validation Log (`<= 0.000009°` vs JPL Horizons)**: [docs/VALIDATION_LOG.md](docs/VALIDATION_LOG.md)
+- **Global Multi-Agent Rules**: [AGENTS.md](AGENTS.md)
 
 ---
 
-## Requisitos Previos
+## Prerequisites
 
 - **Python**: `>= 3.12`
-- **Node.js**: `>= 18` (incluye `npm`)
+- **Node.js**: `>= 18` (includes `npm`)
 - **Git**
 
 ---
 
-## Instalación Inicial (Primer Clonado)
+## Initial Setup (Fresh Clone)
 
-### 1. Entorno Backend y Descarga de Kernels SPICE
+### 1. Backend Environment & SPICE Kernel Download
 ```bash
-# Crear y activar entorno virtual
+# Create and activate virtual environment
 python -m venv .venv
 
-# En Windows PowerShell:
+# On Windows PowerShell:
 .\.venv\Scripts\Activate.ps1
-# En Linux/macOS:
+# On Linux/macOS:
 # source .venv/bin/activate
 
-# Instalar dependencias del backend
+# Install backend dependencies
 pip install -e "backend[dev]"
 
-# Descargar y verificar los 4 kernels NAIF SPICE oficiales (de421.bsp, libración física)
+# Download and verify the 4 official NAIF SPICE kernels (de421.bsp, physical libration)
 python scripts/fetch_kernels.py
 ```
 
-### 2. Dependencias del Frontend
+### 2. Frontend Dependencies
 ```bash
 cd frontend
 npm install
@@ -47,25 +47,25 @@ cd ..
 
 ---
 
-## Arranque Rápido en Local (Backend FastAPI + Frontend Vite)
+## Quick Local Start (FastAPI Backend + Vite Frontend)
 
-### Opción A — Lanzador unificado (1 solo comando)
+### Option A — Unified launcher (single command)
 ```bash
 python scripts/start_dev.py
 ```
-Esto levanta simultáneamente:
-- **Frontend Web ("NASA Mission Control Minimal")**: `http://localhost:5173`
-- **Backend Científico FastAPI (Swagger/OpenAPI)**: `http://localhost:8000/docs`
-- **Sello de Verificación Científica JPL Horizons**: `http://localhost:8000/api/v1/health`
+This simultaneously starts:
+- **Web Frontend ("NASA Mission Control Minimal")**: `http://localhost:5173`
+- **FastAPI Scientific Backend (Swagger/OpenAPI)**: `http://localhost:8000/docs`
+- **JPL Horizons Scientific Verification Seal**: `http://localhost:8000/api/v1/health`
 
-### Opción B — En dos terminales separadas
-**Terminal 1 (Backend FastAPI):**
+### Option B — In two separate terminals
+**Terminal 1 (FastAPI Backend):**
 ```bash
 cd backend
 uvicorn app.main:app --reload --port 8000
 ```
 
-**Terminal 2 (Frontend Vite + React + Three.js + ECharts):**
+**Terminal 2 (Vite + React + Three.js + ECharts Frontend):**
 ```bash
 cd frontend
 npm run dev
@@ -73,16 +73,16 @@ npm run dev
 
 ---
 
-## Verificación Científica y Suite de Tests
+## Scientific Verification & Test Suite
 
 ```powershell
-# 1. Verificador integral de entorno, contratos AST Python<->TS y guardia sin refracción
+# 1. Comprehensive verifier for environment, Python<->TS AST contracts, and airless guard
 .\.venv\Scripts\python.exe scripts/verify_environment.py
 
-# 2. Suite científica y de endpoints backend (49 tests, incluyendo oráculo NASA JPL Horizons)
+# 2. Backend scientific & endpoint suite (including NASA JPL Horizons oracle)
 .\.venv\Scripts\python.exe -m pytest backend/tests -v
 
-# 3. Typecheck, tests unitarios y build de producción del frontend
+# 3. Frontend typecheck, unit tests, and production build
 $env:Path = "C:\Program Files\nodejs;$env:Path"
 & "C:\Program Files\nodejs\npm.cmd" --prefix frontend run typecheck
 & "C:\Program Files\nodejs\npm.cmd" --prefix frontend test
@@ -91,17 +91,17 @@ $env:Path = "C:\Program Files\nodejs;$env:Path"
 
 ---
 
-## Auto-Sincronización Continua con GitHub (`scripts/auto_sync_github.py`)
+## Continuous GitHub Auto-Sync (`scripts/auto_sync_github.py`)
 
-Para vigilar automáticamente los cambios en el repositorio y ejecutar `git add -A` + `git commit` + `git push origin main` cada pocos minutos:
+To automatically watch repository changes and run `git add -A` + `git commit` + `git push origin main` periodically:
 
 ```powershell
-# Modo watcher continuo (revisa y sube cambios cada 60 segundos por defecto)
+# Continuous watcher mode (checks and pushes changes every 60 seconds by default)
 .\.venv\Scripts\python.exe scripts/auto_sync_github.py
 
-# Personalizar el intervalo (ej. cada 120 segundos)
+# Customize interval (e.g., every 120 seconds)
 .\.venv\Scripts\python.exe scripts/auto_sync_github.py --interval 120
 
-# Ejecutar una única sincronización inmediata y salir
+# Run a single immediate sync and exit
 .\.venv\Scripts\python.exe scripts/auto_sync_github.py --once
 ```

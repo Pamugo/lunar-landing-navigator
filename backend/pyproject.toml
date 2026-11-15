@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lunar-landing-navigator-backend"
 version = "0.1.0"
-description = "Backend cientifico del Lunar Landing Site Navigator (NASA Space Apps 2026): efemerides JPL + horizonte LOLA sin atmosfera."
+description = "Scientific backend of the Lunar Landing Site Navigator (NASA Space Apps 2026): JPL ephemeris + airless LOLA horizon."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Watcher continuo de descarga automatica desde GitHub (git fetch + git pull --rebase --autostash).
+"""Continuous auto-download watcher from GitHub (git fetch + git pull --rebase --autostash).
 
-Propietario: qa-verification-agent.
-Comprueba periodicamente (cada 60 segundos por defecto) si hay commits nuevos en origin/main.
-Si detecta cambios:
-  1. Ejecuta git pull --rebase --autostash origin main
-  2. Si cambiaron dependencias (pyproject.toml o package.json), las actualiza automaticamente.
-  3. Los servidores dev (Vite HMR y FastAPI --reload) se actualizan en vivo en el navegador.
+Owner: qa-verification-agent.
+Periodically checks (every 60 seconds by default) whether there are new commits on origin/main.
+If changes are detected:
+  1. Executes git pull --rebase --autostash origin main
+  2. If dependencies changed (pyproject.toml or package.json), automatically updates them.
+  3. Dev servers (Vite HMR and FastAPI --reload) reload live in the browser.
 
-Uso:
+Usage:
     python scripts/auto_pull_watcher.py
     python scripts/auto_pull_watcher.py --interval 30
     python scripts/auto_pull_watcher.py --once
@@ -77,17 +77,17 @@ def run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def check_and_pull(remote: str = "origin", branch: str = "main") -> bool:
-    """Verifica si origin/branch tiene commits nuevos y los descarga con rebase y autostash."""
+    """Checks whether origin/branch has new commits and pulls them with rebase and autostash."""
     now_utc = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     lock_file = ROOT / ".git/index.lock"
     if lock_file.exists():
-        print(f"[auto-pull] [{now_utc}] .git/index.lock detectado; esperando al siguiente ciclo.")
+        print(f"[auto-pull] [{now_utc}] .git/index.lock detected; waiting for next cycle.")
         return False
 
     fetch_res = run_git(["fetch", remote, branch])
     if fetch_res.returncode != 0:
-        print(f"[auto-pull] [{now_utc}] Error en git fetch: {fetch_res.stderr.strip()}", file=sys.stderr)
+        print(f"[auto-pull] [{now_utc}] Error in git fetch: {fetch_res.stderr.strip()}", file=sys.stderr)
         return False
 
     rev_res = run_git(["rev-list", "--count", f"HEAD..{remote}/{branch}"])
@@ -100,67 +100,67 @@ def check_and_pull(remote: str = "origin", branch: str = "main") -> bool:
         behind_count = 0
 
     if behind_count == 0:
-        # Repositorio al dia
+        # Repository up to date
         return False
 
-    print(f"\n[auto-pull] [{now_utc}] Detectados {behind_count} nuevo(s) commit(s) en {remote}/{branch}. Descargando...")
+    print(f"\n[auto-pull] [{now_utc}] Detected {behind_count} new commit(s) on {remote}/{branch}. Pulling...")
 
     pull_res = run_git(["pull", "--rebase", "--autostash", remote, branch])
     if pull_res.returncode != 0:
-        print(f"[auto-pull] [{now_utc}] ERROR en git pull: {pull_res.stderr.strip()}", file=sys.stderr)
+        print(f"[auto-pull] [{now_utc}] ERROR in git pull: {pull_res.stderr.strip()}", file=sys.stderr)
         return False
 
-    print(f"[auto-pull] [{now_utc}] Descarga completada con exito:")
+    print(f"[auto-pull] [{now_utc}] Pull completed successfully:")
     for line in pull_res.stdout.splitlines():
         if line.strip():
             print(f"  {line.strip()}")
 
-    # Verificar si se anadieron o modificaron dependencias
+    # Check if dependencies were added or modified
     py_exe = find_venv_python()
     npm_exe = find_npm()
 
-    # Si pyproject.toml cambio en los ultimos commits
+    # If pyproject.toml changed in recent commits
     diff_stat = run_git(["diff", f"HEAD~{behind_count}", "HEAD", "--name-only"]).stdout
     changed_files = [f.strip() for f in diff_stat.splitlines() if f.strip()]
 
     if any("pyproject.toml" in f for f in changed_files):
-        print(f"[auto-pull] [{now_utc}] pyproject.toml modificado -> actualizando librerias de Python...")
+        print(f"[auto-pull] [{now_utc}] pyproject.toml modified -> updating Python libraries...")
         subprocess.run([py_exe, "-m", "pip", "install", "-e", "backend[dev]"], cwd=str(ROOT), check=False)
 
     if any("package.json" in f for f in changed_files):
-        print(f"[auto-pull] [{now_utc}] package.json modificado -> actualizando paquetes npm...")
+        print(f"[auto-pull] [{now_utc}] package.json modified -> updating npm packages...")
         subprocess.run([npm_exe, "install"], cwd=str(ROOT / "frontend"), check=False)
 
-    print(f"[auto-pull] [{now_utc}] Sincronizacion lista. Vite y FastAPI reflejan los cambios en vivo.\n")
+    print(f"[auto-pull] [{now_utc}] Sync ready. Vite and FastAPI reflect the changes live.\n")
     return True
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Watcher continuo de descarga automatica desde GitHub (git fetch + pull)."
+        description="Continuous auto-download watcher from GitHub (git fetch + pull)."
     )
     parser.add_argument(
         "--interval",
         type=float,
         default=60.0,
-        help="Segundos entre comprobaciones (por defecto: 60).",
+        help="Seconds between checks (default: 60).",
     )
     parser.add_argument(
         "--remote",
         type=str,
         default="origin",
-        help="Nombre del remoto de Git (por defecto: origin).",
+        help="Git remote name (default: origin).",
     )
     parser.add_argument(
         "--branch",
         type=str,
         default="main",
-        help="Rama de Git a monitorizar (por defecto: main).",
+        help="Git branch to monitor (default: main).",
     )
     parser.add_argument(
         "--once",
         action="store_true",
-        help="Ejecuta una unica comprobacion y termina.",
+        help="Run a single check and exit.",
     )
     args = parser.parse_args()
 
@@ -171,12 +171,12 @@ def main() -> int:
     interval_s = max(5.0, float(args.interval))
     git_bin = find_git()
     print("=" * 84)
-    print(" LUNAR LANDING SITE NAVIGATOR — GITHUB AUTO-PULL WATCHER ACTIVO")
+    print(" LUNAR LANDING SITE NAVIGATOR — GITHUB AUTO-PULL WATCHER ACTIVE")
     print("=" * 84)
-    print(f"  Directorio : {ROOT}")
-    print(f"  Git binario: {git_bin}")
-    print(f"  Monitoriza : {args.remote}/{args.branch}")
-    print(f"  Intervalo  : cada {interval_s:.0f} s (comprobacion automatica)")
+    print(f"  Directory  : {ROOT}")
+    print(f"  Git binary : {git_bin}")
+    print(f"  Monitoring : {args.remote}/{args.branch}")
+    print(f"  Interval   : every {interval_s:.0f} s (automatic check)")
     print("=" * 84)
 
     try:
@@ -184,7 +184,7 @@ def main() -> int:
             check_and_pull(remote=args.remote, branch=args.branch)
             time.sleep(interval_s)
     except KeyboardInterrupt:
-        print("\n[auto-pull] Watcher detenido.")
+        print("\n[auto-pull] Watcher stopped.")
         return 0
 
 

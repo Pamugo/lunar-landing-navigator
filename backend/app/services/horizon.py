@@ -1,8 +1,8 @@
-"""Raycasting 360° de horizonte topografico lunar sin atmosfera, cache offline .npz y fallback esferico (RT-02, RT-03).
+"""Airless 360-deg lunar topographic horizon raycasting, offline .npz cache, and spherical fallback (RT-02, RT-03).
 
-Propietario: astro-terrain-specialist.
-Referencia matematica: docs/MATH_MODELS.md §2.1-2.3.
-Procedimiento: skills/lola-topography-horizon/SKILL.md.
+Owner: astro-terrain-specialist.
+Math reference: docs/MATH_MODELS.md §2.1-2.3.
+Procedure: skills/lola-topography-horizon/SKILL.md.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def _cache_filepath(req: HorizonRequest, dem_product: str) -> Path:
 
 
 def _build_radial_grid_m(max_distance_m: float) -> npt.NDArray[np.float64]:
-    """Malla radial adaptativa [m]: alta densidad en campo cercano (tangencia ~2.6 km) y media/lejana hasta L."""
+    """Adaptive radial mesh [m]: high density in near field (~2.6 km tangency) and mid/far field out to L."""
     s1 = np.arange(10.0, min(3_500.0, max_distance_m) + 1.0, 15.0, dtype=np.float64)
     if max_distance_m <= 3_500.0:
         return s1
@@ -52,7 +52,7 @@ def _build_radial_grid_m(max_distance_m: float) -> npt.NDArray[np.float64]:
 
 
 def _spherical_analytical_profile(req: HorizonRequest, site_elev_m: float = 0.0) -> HorizonProfile:
-    """Fallback analitico de esfera lunar lisa sin atmosfera (MATH_MODELS §2.2.2)."""
+    """Analytical smooth airless lunar sphere fallback (MATH_MODELS §2.2.2)."""
     h_mast = max(0.0, float(req.site.observer_height_m))
     dip_rad = math.acos(R_MOON_M / (R_MOON_M + h_mast))
     dip_deg = -math.degrees(dip_rad)
@@ -81,11 +81,11 @@ def compute_horizon_profile(
     dem: LolaDemDataset | None = None,
     use_cache: bool = True,
 ) -> HorizonProfile:
-    """Calcula el perfil de horizonte 360° sobre circulos maximos sin refraccion atmosferica (MATH_MODELS §2.1-2.3).
+    """Computes the airless 360-deg horizon profile along great circles (MATH_MODELS §2.1-2.3).
 
-    - Si existe en cache .npz y use_cache=True -> devuelve con horizon_source='lola_dem_cached'.
-    - Si cae dentro del DEM polar sur -> raycasting topografico LOLA ('lola_dem').
-    - Si cae fuera del DEM polar sur -> fallback limpio 'spherical_analytical' (nunca error 500).
+    - If present in .npz cache and use_cache=True -> returns with horizon_source='lola_dem_cached'.
+    - If inside the south polar DEM -> LOLA topographic raycasting ('lola_dem').
+    - If outside the south polar DEM -> clean 'spherical_analytical' fallback (never 500 error).
     """
     active_dem = dem or get_default_polar_dem()
     dem_name = req.dem_product or active_dem.product_name
@@ -98,7 +98,7 @@ def compute_horizon_profile(
 
     x0_m, y0_m = latlon_to_stereographic(lat0_rad, lon0_rad)
 
-    # Comprobar si el sitio cae dentro del DEM polar sur
+    # Check whether the site falls within the south polar DEM
     if req.site.lat_deg > -78.0 or not active_dem.contains_xy(x0_m, y0_m, margin_m=2_000.0):
         nominal_elev = 0.0
         if req.site.site_id:
@@ -141,7 +141,7 @@ def compute_horizon_profile(
     cos_theta = np.cos(theta_arr)
     sin_theta = np.sin(theta_arr)
 
-    # Punto de destino sobre circulo maximo (MATH_MODELS §2.3)
+    # Destination point along great circle (MATH_MODELS §2.3)
     sin_lat = np.clip(sin_lat0 * cos_theta + cos_lat0 * sin_theta * np.cos(az_rad_arr), -1.0, 1.0)
     lat_grid = np.arcsin(sin_lat)
     lon_grid = lon0_rad + np.arctan2(
@@ -161,13 +161,13 @@ def compute_horizon_profile(
     den = r_grid * sin_theta
     gamma_grid = np.arctan2(num, den)
 
-    # Ignorar NaN al tomar el maximo a lo largo de cada rayo
+    # Ignore NaN when taking the maximum along each ray
     gamma_safe = np.where(np.isnan(gamma_grid), -np.inf, gamma_grid)
     max_idx = np.argmax(gamma_safe, axis=1)
     max_gamma_rad = gamma_safe[np.arange(n_az), max_idx]
     best_dist_m = s_m_arr[0, max_idx]
 
-    # Si algun rayo completo fuera NaN, usar depresion esferica
+    # If an entire ray is NaN, fall back to spherical horizon depression
     dip_fallback = -math.acos(R_MOON_M / (R_MOON_M + max(0.0, float(req.site.observer_height_m))))
     max_gamma_rad = np.where(np.isneginf(max_gamma_rad), dip_fallback, max_gamma_rad)
 
@@ -202,10 +202,10 @@ def interpolate_horizon_deg(
     profile: HorizonProfile,
     query_azimuths_deg: npt.NDArray[np.floating],
 ) -> npt.NDArray[np.float64]:
-    """Interpola lineal y circularmente gamma_h(A) [deg] en los acimuts solicitados [0, 360)."""
+    """Circularly and linearly interpolates gamma_h(A) [deg] at requested azimuths [0, 360)."""
     az_base = np.asarray(profile.azimuths_deg, dtype=np.float64)
     el_base = np.asarray(profile.horizon_elevation_deg, dtype=np.float64)
-    # Cerrar el ciclo en 360 deg con el valor en 0 deg
+    # Close the 360-deg loop with the 0-deg value
     az_ext = np.append(az_base, 360.0)
     el_ext = np.append(el_base, el_base[0])
     q = np.mod(np.asarray(query_azimuths_deg, dtype=np.float64), 360.0)
@@ -213,7 +213,7 @@ def interpolate_horizon_deg(
 
 
 def ensure_curated_Master_cache() -> int:
-    """Precalcula y verifica los archivos .npz de horizonte offline para los sitios polares curados."""
+    """Precomputes and verifies offline horizon .npz files for curated polar sites."""
     count = 0
     for site in load_curated_sites():
         if site.region != "south_polar":

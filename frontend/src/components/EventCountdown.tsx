@@ -1,3 +1,4 @@
+import { useTranslation } from "../i18n/LanguageContext";
 import type { EventPrediction } from "../types/contracts";
 import type { AppMode } from "./HeaderHUD";
 
@@ -8,9 +9,14 @@ export interface EventCountdownProps {
   mode: AppMode;
 }
 
-export function formatDurationSeconds(seconds: number | null, beyondWindow: boolean, windowDays: number): string {
+export function formatDurationSeconds(
+  seconds: number | null,
+  beyondWindow: boolean,
+  windowDays: number,
+  beyondPrefix = "> window",
+): string {
   if (beyondWindow || seconds === null) {
-    return `> ventana (${windowDays.toFixed(0)} d)`;
+    return `${beyondPrefix} (${windowDays.toFixed(0)} d)`;
   }
   const clamped = Math.max(0, Math.round(seconds));
   const days = Math.floor(clamped / 86400);
@@ -23,6 +29,8 @@ export function formatDurationSeconds(seconds: number | null, beyondWindow: bool
 }
 
 export function EventCountdown({ nextSunset, nextEarthset, windowDays, mode }: EventCountdownProps) {
+  const { t } = useTranslation();
+
   const sunImminent =
     !nextSunset.beyond_window &&
     nextSunset.seconds_from_reference !== null &&
@@ -34,28 +42,38 @@ export function EventCountdown({ nextSunset, nextEarthset, windowDays, mode }: E
     nextEarthset.seconds_from_reference <= 86400;
 
   return (
-    <div className="countdown-grid" aria-label="Cuentas atras hasta ocaso solar y puesta de la Tierra">
+    <div className="countdown-grid" aria-label={t.countdown.ariaLabel}>
       <div className={`countdown-box ${sunImminent ? "imminent" : ""}`}>
         <span className="countdown-label">
-          ☀ {mode === "edu" ? "Próximo Ocaso Solar" : "Time to Sunset"}
+          ☀ {mode === "edu" ? t.countdown.nextSunsetEdu : t.countdown.timeToSunsetEng}
         </span>
         <span className="countdown-value mono-telemetry">
-          {formatDurationSeconds(nextSunset.seconds_from_reference, nextSunset.beyond_window, windowDays)}
+          {formatDurationSeconds(
+            nextSunset.seconds_from_reference,
+            nextSunset.beyond_window,
+            windowDays,
+            t.countdown.windowExceed,
+          )}
         </span>
         <span className="countdown-utc mono-telemetry">
-          {nextSunset.time_utc ? nextSunset.time_utc.replace(".000Z", "Z") : "Sin cruce en ventana"}
+          {nextSunset.time_utc ? nextSunset.time_utc.replace(".000Z", "Z") : t.countdown.noCrossing}
         </span>
       </div>
 
       <div className={`countdown-box ${earthImminent ? "imminent" : ""}`}>
         <span className="countdown-label">
-          🜨 {mode === "edu" ? "Próxima Puesta de Tierra" : "Time to Earthset (DTE)"}
+          🜨 {mode === "edu" ? t.countdown.nextEarthsetEdu : t.countdown.timeToEarthsetEng}
         </span>
         <span className="countdown-value mono-telemetry">
-          {formatDurationSeconds(nextEarthset.seconds_from_reference, nextEarthset.beyond_window, windowDays)}
+          {formatDurationSeconds(
+            nextEarthset.seconds_from_reference,
+            nextEarthset.beyond_window,
+            windowDays,
+            t.countdown.windowExceed,
+          )}
         </span>
         <span className="countdown-utc mono-telemetry">
-          {nextEarthset.time_utc ? nextEarthset.time_utc.replace(".000Z", "Z") : "Sin cruce en ventana"}
+          {nextEarthset.time_utc ? nextEarthset.time_utc.replace(".000Z", "Z") : t.countdown.noCrossing}
         </span>
       </div>
     </div>

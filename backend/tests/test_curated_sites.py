@@ -1,7 +1,7 @@
-"""Validacion del catalogo de sitios curados (RF-01) y proyeccion estereografica polar sur (RT-02).
+"""Validation of the curated sites catalog (RF-01) and south polar stereographic projection (RT-02).
 
-Propietario: qa-verification-agent.
-Ejecutable con stdlib (unittest) sin dependencias externas.
+Owner: qa-verification-agent.
+Executable with stdlib (unittest) with no external dependencies.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ DEG = math.pi / 180.0
 
 
 def south_polar_stereo_forward(lat_rad: float, lon_rad: float, radius_m: float = R_MOON_M) -> tuple[float, float]:
-    """Oraculo analitico: proyeccion estereografica polar sur (esfera R=1737.4 km, verdadera escala en 90S)."""
+    """Analytical oracle: south polar stereographic projection (sphere R=1737.4 km, true scale at 90S)."""
     rho = 2.0 * radius_m * math.tan(math.pi / 4.0 + lat_rad / 2.0)
     x = rho * math.sin(lon_rad)
     y = rho * math.cos(lon_rad)
@@ -26,7 +26,7 @@ def south_polar_stereo_forward(lat_rad: float, lon_rad: float, radius_m: float =
 
 
 def south_polar_stereo_inverse(x_m: float, y_m: float, radius_m: float = R_MOON_M) -> tuple[float, float]:
-    """Oraculo analitico inverso: (x, y) -> (lat_rad, lon_rad)."""
+    """Inverse analytical oracle: (x, y) -> (lat_rad, lon_rad)."""
     rho = math.hypot(x_m, y_m)
     if rho == 0.0:
         return -math.pi / 2.0, 0.0
@@ -36,7 +36,7 @@ def south_polar_stereo_inverse(x_m: float, y_m: float, radius_m: float = R_MOON_
 
 
 class TestCuratedSitesCatalog(unittest.TestCase):
-    """RF-01: catalogo inicial de sitios curados en data/curated_sites.json."""
+    """RF-01: initial catalog of curated sites in data/curated_sites.json."""
 
     def setUp(self) -> None:
         self.data = json.loads((ROOT / "data/curated_sites.json").read_text(encoding="utf-8"))
@@ -60,7 +60,7 @@ class TestCuratedSitesCatalog(unittest.TestCase):
 
 
 class TestSouthPolarStereographicOracle(unittest.TestCase):
-    """RT-02: oraculo de proyeccion estereografica polar sur (skills/lola-topography-horizon/SKILL.md §2)."""
+    """RT-02: south polar stereographic projection oracle (skills/lola-topography-horizon/SKILL.md §2)."""
 
     def test_south_pole_maps_to_origin(self) -> None:
         x, y = south_polar_stereo_forward(-90.0 * DEG, 0.0)

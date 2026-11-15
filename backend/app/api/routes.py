@@ -1,7 +1,7 @@
-"""Routers HTTP /api/v1 del Lunar Landing Site Navigator.
+"""HTTP /api/v1 routers for the Lunar Landing Site Navigator.
 
-Propietario: fullstack-visualizer.
-No contiene fisica: delega exclusivamente en app.services.* y devuelve modelos Pydantic de app.models.schemas.
+Owner: fullstack-visualizer.
+Contains no physics: delegates exclusively to app.services.* and returns Pydantic models from app.models.schemas.
 """
 
 from __future__ import annotations
@@ -37,25 +37,25 @@ router = APIRouter(prefix="/api/v1", tags=["navigator"])
 
 @router.get("/sites", response_model=list[CuratedSite])
 def list_curated_sites() -> list[CuratedSite]:
-    """Devuelve el catalogo de 9 sitios curados con deep-links a LROC QuickMap y NASA Moon Trek (RF-01)."""
+    """Returns the curated catalog of 9 sites with deep links to LROC QuickMap and NASA Moon Trek (RF-01)."""
     return load_curated_sites()
 
 
 @router.get("/hardware-profiles", response_model=list[HardwareProfile])
 def list_hardware_profiles() -> list[HardwareProfile]:
-    """Devuelve los perfiles de altura de mastil/hardware de la CSA y NASA CLPS/Artemis (RF-01)."""
+    """Returns CSA and NASA CLPS/Artemis hardware mast height profiles (RF-01)."""
     return load_hardware_profiles()
 
 
 @router.post("/horizon", response_model=HorizonProfile)
 def post_horizon(req: HorizonRequest) -> HorizonProfile:
-    """Calcula o recupera de cache el perfil de horizonte 360° sin refraccion (RT-02, RT-03)."""
+    """Computes or retrieves from cache the 360-deg airless horizon profile (RT-02, RT-03)."""
     return compute_horizon_profile(req)
 
 
 @router.post("/terrain-patch", response_model=TerrainPatch)
 def post_terrain_patch(req: TerrainPatchRequest) -> TerrainPatch:
-    """Extrae una malla 3D local con resolucion adaptada al dispositivo (mobile/tablet/desktop) (RF-06)."""
+    """Extracts a local 3D mesh with device-adaptive resolution (mobile/tablet/desktop) (RF-06)."""
     return extract_terrain_patch(
         site=req.site,
         half_extent_km=req.half_extent_km,
@@ -65,25 +65,25 @@ def post_terrain_patch(req: TerrainPatchRequest) -> TerrainPatch:
 
 @router.post("/visibility", response_model=VisibilityTimeSeries)
 def post_visibility(req: VisibilityRequest) -> VisibilityTimeSeries:
-    """Calcula la serie temporal de visibilidad Sol/Tierra y los eventos Sunset/Earthset (RF-03, RF-04)."""
+    """Computes the Sun/Earth visibility time series and Sunset/Earthset events (RF-03, RF-04)."""
     if req.window.end_utc <= req.window.start_utc:
-        raise HTTPException(status_code=422, detail="end_utc debe ser posterior a start_utc")
+        raise HTTPException(status_code=422, detail="end_utc must be after start_utc")
     return compute_visibility_timeseries(req)
 
 
 @router.post("/compare", response_model=ComparisonResult)
 def post_compare(req: ComparisonRequest) -> ComparisonResult:
-    """Compara de 1 a 4 sitios bajo identicos parametros temporales (RF-02, RF-05)."""
+    """Compares 1 to 9 sites under identical temporal parameters (RF-02, RF-05)."""
     if req.window.end_utc <= req.window.start_utc:
-        raise HTTPException(status_code=422, detail="end_utc debe ser posterior a start_utc")
+        raise HTTPException(status_code=422, detail="end_utc must be after start_utc")
     return compare_sites(req)
 
 
 @router.post("/solar-energy", response_model=SolarEnergySummary)
 def post_solar_energy(req: SolarEnergyRequest) -> SolarEnergySummary:
-    """Calcula potencia por tipo de panel, energia acumulada y buscador de acimut optimo (RF-05, MATH_MODELS §5)."""
+    """Computes power by panel type, accumulated energy, and optimal azimuth finder (RF-05, MATH_MODELS §5)."""
     if req.window.end_utc <= req.window.start_utc:
-        raise HTTPException(status_code=422, detail="end_utc debe ser posterior a start_utc")
+        raise HTTPException(status_code=422, detail="end_utc must be after start_utc")
     vis_req = VisibilityRequest(
         site=req.site,
         window=req.window,
@@ -95,8 +95,8 @@ def post_solar_energy(req: SolarEnergyRequest) -> SolarEnergySummary:
 
 @router.post("/dte-analysis", response_model=AdvancedDteMetrics)
 def post_dte_analysis(req: VisibilityRequest) -> AdvancedDteMetrics:
-    """Calcula metricas avanzadas de telecomunicaciones DTE, margen topografico y perdidas FSPL (RF-05, MATH_MODELS §6)."""
+    """Computes advanced DTE telecom metrics, topographic clearance, and FSPL losses (RF-05, MATH_MODELS §6)."""
     if req.window.end_utc <= req.window.start_utc:
-        raise HTTPException(status_code=422, detail="end_utc debe ser posterior a start_utc")
+        raise HTTPException(status_code=422, detail="end_utc must be after start_utc")
     series = compute_visibility_timeseries(req)
     return compute_advanced_dte_metrics(series, dte_elevation_mask_deg=req.dte_elevation_mask_deg)

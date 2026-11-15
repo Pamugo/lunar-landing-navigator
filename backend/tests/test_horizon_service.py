@@ -1,6 +1,6 @@
-"""Oraculos del servicio de horizonte 360°, cache offline .npz, alturas de hardware CSA y fallback esferico (RT-02, RT-03, RF-01).
+"""Oracles for the 360-degree horizon service, offline .npz cache, CSA hardware heights, and spherical fallback (RT-02, RT-03, RF-01).
 
-Propietario: qa-verification-agent.
+Owner: qa-verification-agent.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ DEG = math.pi / 180.0
 
 
 class TestHorizonServiceAndReliability(unittest.TestCase):
-    """Verifica el raycasting 360° sobre GeoTIFF, la cache offline y el fallback esferico."""
+    """Verifies 360° raycasting over GeoTIFF, the offline cache, and spherical fallback."""
 
     def test_flat_dem_geotiff_reproduces_smooth_sphere_dip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -43,7 +43,7 @@ class TestHorizonServiceAndReliability(unittest.TestCase):
     def test_synthetic_ring_wall_dem_raises_horizon_to_expected_elevation(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tif_path = Path(tmpdir) / "ring_pole.tif"
-            # Anillo de 1000 m de altura a 15 km del polo sur
+            # 1000 m tall ring at 15 km from the south pole
             create_synthetic_south_pole_dem(
                 tif_path,
                 half_extent_m=30_000.0,
@@ -60,7 +60,7 @@ class TestHorizonServiceAndReliability(unittest.TestCase):
                 self.assertLess(gamma_deg, 4.2)
 
     def test_hardware_mast_height_monotonicity_csa_vs_clps(self) -> None:
-        """Elevar el mastil (0.5 m LEAP -> 1.5 m CSA Rover -> 3.5 m CLPS Lander) baja el horizonte (mayor visibilidad)."""
+        """Raising the mast (0.5 m LEAP -> 1.5 m CSA Rover -> 3.5 m CLPS Lander) lowers the horizon (higher visibility)."""
         site_05 = LunarCoordinate(lat_deg=-89.68, lon_deg=-166.0, observer_height_m=0.5, site_id="shackleton-rim")
         site_15 = LunarCoordinate(lat_deg=-89.68, lon_deg=-166.0, observer_height_m=1.5, site_id="shackleton-rim")
         site_35 = LunarCoordinate(lat_deg=-89.68, lon_deg=-166.0, observer_height_m=3.5, site_id="shackleton-rim")
@@ -77,7 +77,7 @@ class TestHorizonServiceAndReliability(unittest.TestCase):
         self.assertLess(mean_35, mean_15)
 
     def test_custom_equatorial_coordinates_graceful_spherical_fallback(self) -> None:
-        """Coordenadas fuera del DEM polar nunca lanzan excepcion: degradan a spherical_analytical."""
+        """Coordinates outside the polar DEM never raise an exception: they fall back to spherical_analytical."""
         custom_site = LunarCoordinate(lat_deg=15.25, lon_deg=-42.8, observer_height_m=1.5)
         req = HorizonRequest(site=custom_site, azimuth_step_deg=1.0, max_distance_km=150.0)
         profile = compute_horizon_profile(req)

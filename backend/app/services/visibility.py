@@ -1,7 +1,7 @@
-"""Visibilidad solar/terrestre, fraccion de disco, eventos Sunset/Earthset y metricas comparativas (RF-02, RF-04, RF-05, RT-04).
+"""Solar/Earth visibility, visible disk fraction, Sunset/Earthset events, and comparative metrics (RF-02, RF-04, RF-05, RT-04).
 
-Propietario: astro-terrain-specialist.
-Referencia matematica: docs/MATH_MODELS.md §3 (visibilidad), §4 (eventos) y §5 (energia).
+Owner: astro-terrain-specialist.
+Math reference: docs/MATH_MODELS.md §3 (visibility), §4 (events), and §5 (energy).
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ FREQ_KA_BAND_GHZ: float = 32.0
 
 
 def _disk_visible_fraction_rad(elevation_rad: float, alpha_rad: float, horizon_rad: float) -> float:
-    """Fraccion visible de un disco uniforme sobre horizonte localmente recto (MATH_MODELS §3.3)."""
+    """Visible fraction of a uniform disk over a locally straight horizon (MATH_MODELS §3.3)."""
     if alpha_rad <= 0.0:
         return 1.0 if elevation_rad >= horizon_rad else 0.0
     x = (horizon_rad - elevation_rad) / alpha_rad
@@ -58,7 +58,7 @@ def _disk_visible_fraction_rad(elevation_rad: float, alpha_rad: float, horizon_r
 
 
 def _visibility_state_rad(elevation_rad: float, alpha_rad: float, horizon_rad: float) -> VisibilityState:
-    """Estado de visibilidad: VISIBLE | PARTIAL | OCCULTED (MATH_MODELS §3.2)."""
+    """Visibility state: VISIBLE | PARTIAL | OCCULTED (MATH_MODELS §3.2)."""
     if elevation_rad - alpha_rad > horizon_rad:
         return VisibilityState.VISIBLE
     if elevation_rad + alpha_rad < horizon_rad:
@@ -83,7 +83,7 @@ def _find_first_event(
     g_values_deg: Sequence[float],
     falling: bool,
 ) -> EventPrediction:
-    """Localiza el primer cruce de cero de g(t) y lo refina con Brent a precision de 1 s (MATH_MODELS §4)."""
+    """Locates the first zero crossing of g(t) and refines via Brent to 1 s precision (MATH_MODELS §4)."""
     if len(times_utc) < 2:
         return EventPrediction(event=event_type, time_utc=None, seconds_from_reference=None, beyond_window=True)
 
@@ -161,7 +161,7 @@ def compute_visibility_timeseries(
     req: VisibilityRequest,
     horizon_profile: HorizonProfile | None = None,
 ) -> VisibilityTimeSeries:
-    """Calcula la serie temporal completa de visibilidad de Sol y Tierra y los eventos de horizonte."""
+    """Computes the full Sun and Earth visibility time series and horizon crossing events."""
     profile = horizon_profile or compute_horizon_profile(
         HorizonRequest(site=req.site, azimuth_step_deg=0.5, max_distance_km=150.0)
     )
@@ -232,7 +232,7 @@ def compute_advanced_dte_metrics(
     series: VisibilityTimeSeries,
     dte_elevation_mask_deg: float = 0.0,
 ) -> AdvancedDteMetrics:
-    """Calcula metricas avanzadas de telecomunicaciones DTE (MATH_MODELS §6)."""
+    """Computes advanced DTE telecommunications metrics (MATH_MODELS §6)."""
     if not series.samples:
         return AdvancedDteMetrics(
             terrain_clearance_deg=0.0,
@@ -251,13 +251,13 @@ def compute_advanced_dte_metrics(
             simultaneous_sun_earth_hours=0.0,
         )
 
-    # 1. Holgura topografica angular (instantanea al inicio, minima y maxima)
+    # 1. Angular topographic clearance (instantaneous at start, min, and max)
     clearances = [s.earth.clearance_deg for s in series.samples]
     terrain_clearance_deg = round(float(clearances[0]), 4)
     min_clearance_deg = round(float(min(clearances)), 4)
     max_clearance_deg = round(float(max(clearances)), 4)
 
-    # 2. Caja de libracion terrestre (MATH_MODELS §6.2)
+    # 2. Earth libration box (MATH_MODELS §6.2)
     azimuths = [s.earth.azimuth_deg for s in series.samples]
     elevations = [s.earth.elevation_deg for s in series.samples]
 
@@ -267,20 +267,20 @@ def compute_advanced_dte_metrics(
     mean_el = float(sum(elevations) / len(elevations))
     libration_span = float(math.hypot(el_span, az_span * math.cos(math.radians(mean_el))))
 
-    # 3. Distancia Tierra-Luna y retardos de propagacion de luz (MATH_MODELS §6.3)
+    # 3. Earth-Moon distance and light propagation delays (MATH_MODELS §6.3)
     distances = [s.earth.distance_km for s in series.samples]
     mean_dist_km = float(sum(distances) / len(distances))
     one_way_s = mean_dist_km / SPEED_OF_LIGHT_KM_S
     rtt_s = 2.0 * one_way_s
 
-    # 4. Perdida de propagacion en espacio libre FSPL ITU-R P.525-4 (MATH_MODELS §6.4)
+    # 4. Free-space path loss FSPL ITU-R P.525-4 (MATH_MODELS §6.4)
     # Formula: 20*log10(d_km) + 20*log10(f_ghz) + 92.45
     log_d = math.log10(mean_dist_km)
     fspl_s = 20.0 * log_d + 20.0 * math.log10(FREQ_S_BAND_GHZ) + 92.45
     fspl_x = 20.0 * log_d + 20.0 * math.log10(FREQ_X_BAND_GHZ) + 92.45
     fspl_ka = 20.0 * log_d + 20.0 * math.log10(FREQ_KA_BAND_GHZ) + 92.45
 
-    # 5. Blackout maximo y Horas netas simultaneas Sol+Tierra (MATH_MODELS §6.5)
+    # 5. Max blackout and simultaneous Sun+Earth net hours (MATH_MODELS §6.5)
     step_hours = float(series.window.step_minutes) / 60.0
     dte_flags = [s.earth.clearance_deg >= dte_elevation_mask_deg for s in series.samples]
     sunlit_flags = [s.sun.visible_fraction > 0.0 for s in series.samples]
@@ -312,7 +312,7 @@ def summarize_site_metrics(
     series: VisibilityTimeSeries,
     dte_elevation_mask_deg: float = 0.0,
 ) -> SiteSummaryMetrics:
-    """Agrega las metricas de iluminacion solar, visibilidad DTE y telecomunicaciones avanzadas."""
+    """Aggregates solar illumination, DTE visibility, and advanced telecommunications metrics."""
     n = max(1, len(series.samples))
     step_hours = float(series.window.step_minutes) / 60.0
 
@@ -354,7 +354,7 @@ def summarize_site_metrics(
 
 
 def compare_sites(req: ComparisonRequest) -> ComparisonResult:
-    """Evalua de 1 a 4 sitios bajo identicos parametros temporales y devuelve sus metricas comparadas."""
+    """Evaluates 1 to 4 sites under identical temporal parameters and returns comparative metrics."""
     metrics_list: list[SiteSummaryMetrics] = []
     last_comp: ComputationInfo | None = None
 
@@ -377,11 +377,11 @@ def compare_sites(req: ComparisonRequest) -> ComparisonResult:
     )
 
 
-# --------------------------------------------------------------------------- Modelado de Energia Solar (MATH_MODELS §5)
+# --------------------------------------------------------------------------- Solar Energy Modeling (MATH_MODELS §5)
 
 
 def compute_solar_irradiance_am0(distance_km: float, visible_fraction: float) -> float:
-    """Calcula la irradiancia espacial solar AM0 ajustada por distancia heliocentrica (MATH_MODELS §5.1).
+    """Computes space AM0 solar irradiance adjusted for heliocentric distance (MATH_MODELS §5.1).
 
     Formula: S(t) = (1368.0 / d_au^2) * visible_fraction [W/m^2]
     """
@@ -396,13 +396,13 @@ def compute_solar_energy_analysis(
     series: VisibilityTimeSeries,
     fixed_azimuth_deg: float = 0.0,
 ) -> SolarEnergySummary:
-    """Calcula potencia instantanea, energia acumulada y buscador de acimut optimo (MATH_MODELS §5).
+    """Computes instantaneous power, accumulated energy, and optimal azimuth search (MATH_MODELS §5).
 
-    Evalua 3 arquitecturas:
-      1. horizontal_panel: plano en superficie (proporcional a sin(elevacion)).
-      2. tracking_vertical_panel: vertical con seguimiento en acimut (proporcional a cos(elevacion)).
-      3. fixed_vertical_panel: vertical fijo con efecto coseno (cos(elevacion) * max(0, cos(az_sol - az_panel))).
-    Y el buscador automatico de acimut optimo evaluando los 360 grados discretos [0°, 359°].
+    Evaluates 3 architectures:
+      1. horizontal_panel: flat on the surface (proportional to sin(elevation)).
+      2. tracking_vertical_panel: azimuth-tracking vertical panel (proportional to cos(elevation)).
+      3. fixed_vertical_panel: fixed vertical panel with cosine law (cos(elevation) * max(0, cos(az_sun - az_panel))).
+    Plus automatic optimal azimuth finder across all 360 discrete degrees [0°, 359°].
     """
     n = len(series.samples)
     step_hours = float(series.window.step_minutes) / 60.0
@@ -438,33 +438,33 @@ def compute_solar_energy_analysis(
     dist_au = np.maximum(dist_km, 1.0) / AU_KM
     mean_au = float(np.mean(dist_au))
 
-    # Irradiancia espacial efectiva incidente considerando distancia y fraccion visible del disco
+    # Effective incident space irradiance accounting for distance and visible disk fraction
     s_eff = np.where(vis_frac > 0.0, (SOLAR_CONSTANT_AM0_W_M2 / (dist_au**2)) * vis_frac, 0.0)
 
-    # Solo incide radiacion directa si el Sol esta sobre el horizonte matematico (e > 0)
+    # Direct radiation is incident only when the Sun is above the mathematical horizon (e > 0)
     el_rad = np.radians(el_sun_deg)
     az_rad = np.radians(az_sun_deg)
     sun_above_horizon = el_sun_deg > 0.0
 
-    # 1) Panel horizontal: P = S_eff * sin(e)
+    # 1) Horizontal panel: P = S_eff * sin(e)
     p_horiz = np.where(sun_above_horizon, s_eff * np.sin(el_rad), 0.0)
     e_horiz_kwh = float(np.sum(p_horiz) * step_hours / 1000.0)
 
-    # 2) Panel vertical con seguimiento de acimut: P = S_eff * cos(e)
+    # 2) Azimuth-tracking vertical panel: P = S_eff * cos(e)
     p_track = np.where(sun_above_horizon, s_eff * np.cos(el_rad), 0.0)
     e_track_kwh = float(np.sum(p_track) * step_hours / 1000.0)
 
-    # 3) Panel vertical fijo a fixed_azimuth_deg: P = S_eff * cos(e) * max(0, cos(az_sun - az_panel))
+    # 3) Fixed vertical panel at fixed_azimuth_deg: P = S_eff * cos(e) * max(0, cos(az_sun - az_panel))
     panel_fixed_rad = math.radians(fixed_azimuth_deg % 360.0)
     cos_diff_fixed = np.maximum(0.0, np.cos(az_rad - panel_fixed_rad))
     p_fixed = np.where(sun_above_horizon, p_track * cos_diff_fixed, 0.0)
     e_fixed_kwh = float(np.sum(p_fixed) * step_hours / 1000.0)
 
-    # 4) Buscador de Acimut Optimo (0° a 359°)
+    # 4) Optimal Azimuth Finder (0° to 359°)
     candidate_azimuths_deg = np.arange(360, dtype=np.float64)
     candidate_azimuths_rad = np.radians(candidate_azimuths_deg)
 
-    # p_track es shape (N,), matriz de cosenos es shape (N, 360)
+    # p_track has shape (N,), cosine matrix has shape (N, 360)
     diff_all = az_rad[:, None] - candidate_azimuths_rad[None, :]
     cos_diff_all = np.maximum(0.0, np.cos(diff_all))
     p_all_matrix = p_track[:, None] * cos_diff_all
@@ -508,5 +508,5 @@ def compute_solar_energy_analysis(
 
 
 def find_optimal_panel_azimuth(series: VisibilityTimeSeries) -> OptimalAzimuthResult:
-    """Evalua los 360 grados de acimut [0°, 359°] y localiza la orientacion de maxima energia (MATH_MODELS §5.4)."""
+    """Evaluates all 360 azimuth degrees [0°, 359°] and finds the orientation of maximum energy (MATH_MODELS §5.4)."""
     return compute_solar_energy_analysis(series).optimal_azimuth

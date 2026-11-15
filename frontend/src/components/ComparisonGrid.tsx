@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { buildExternalPortalLinks } from "../services/apiClient";
 import type {
   CuratedSite,
@@ -11,6 +11,8 @@ import type {
 } from "../types/contracts";
 import { EventCountdown } from "./EventCountdown";
 import type { AppMode } from "./HeaderHUD";
+import { useLanguage } from "../i18n/LanguageContext";
+import { TRANSLATIONS, getLocalizedSiteCopy, getShortSiteName, toSentenceCase, type Language } from "../i18n/translations";
 
 export interface ComparisonGridProps {
   curatedSites: CuratedSite[];
@@ -30,6 +32,8 @@ export interface ComparisonGridProps {
   windowDays: number;
   startDateIso?: string;
   mode: AppMode;
+  activeVisualSubview?: "globe3d" | "dome360" | "terrain3d";
+  onShowInTerrain3D?: (index: number) => void;
 }
 
 export function coordinateKey(coord: LunarCoordinate): string {
@@ -62,6 +66,10 @@ export function angularDifference(az1: number, az2: number): number {
   return diff;
 }
 
+export function normalizeAzimuthDeg(deg: number): number {
+  return ((Math.round(deg) % 360) + 360) % 360;
+}
+
 export interface ShadowSector {
   startDeg: number;
   endDeg: number;
@@ -73,7 +81,7 @@ export function computeShadowSectors(
 ): ShadowSector[] {
   const isBlocked = new Array<boolean>(360).fill(false);
 
-  // 1. Acimuts donde el Sol estuvo oculto tras el relieve o con holgura <= 0 en los datos orbitales
+  // 1. Azimuths where the Sun was hidden behind terrain or had clearance <= 0 in orbital data
   if (samples && samples.length > 0) {
     for (const s of samples) {
       if (s.sun.state === "occulted" || s.sun.clearance_deg <= 0 || s.sun.visible_fraction < 0.05) {
@@ -86,7 +94,7 @@ export function computeShadowSectors(
     }
   }
 
-  // 2. Si hay perfil de horizonte LOLA, marcar acimuts donde el horizonte supera la elevacion solar maxima
+  // 2. If a LOLA horizon profile exists, mark azimuths where the horizon exceeds peak solar elevation
   if (horizonProfile && horizonProfile.azimuths_deg && horizonProfile.azimuths_deg.length > 0) {
     const maxSunEl =
       samples && samples.length > 0
@@ -103,7 +111,7 @@ export function computeShadowSectors(
     }
   }
 
-  // Agrupar en sectores angulares contiguos
+  // Group into contiguous angular sectors
   const sectors: ShadowSector[] = [];
   let inSector = false;
   let start = 0;
@@ -132,6 +140,7 @@ interface SolarAzimuthCompassProps {
   horizonProfile?: HorizonProfile | null | undefined;
   samples?: VisibilitySample[] | undefined;
   isTotalShadow?: boolean | undefined;
+  onSelectAzimuth?: ((azDeg: number) => void) | undefined;
 }
 
 export function SolarAzimuthCompass({
@@ -142,45 +151,57 @@ export function SolarAzimuthCompass({
   horizonProfile,
   samples,
   isTotalShadow,
+  onSelectAzimuth,
 }: SolarAzimuthCompassProps) {
+  const { t } = useLanguage();
+  const optimalTargetAz = normalizeAzimuthDeg(optimalAzimuthDeg);
+  const sunTargetAz = sunAzimuthDeg !== null ? normalizeAzimuthDeg(sunAzimuthDeg) : null;
+  const earthTargetAz = earthAzimuthDeg !== null ? normalizeAzimuthDeg(earthAzimuthDeg) : null;
+  const handleMarkerKeyDown = (e: React.KeyboardEvent, targetAz: number) => {
+    if (!onSelectAzimuth) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSelectAzimuth(targetAz);
+    }
+  };
   const cx = 110;
   const cy = 110;
   const rCompass = 80;
 
-  // Sectores de sombra topografica (montanas bloqueando el Sol)
+  // Topographic shadow sectors (mountains blocking the Sun)
   const shadowSectors = computeShadowSectors(samples, horizonProfile);
 
-  // Flecha vector normal (dirección del panel)
+  // Normal vector arrow (panel facing direction)
   const arrowTip = polarToSvg(panelAzimuthDeg, 52, cx, cy);
   const arrowBase = polarToSvg(panelAzimuthDeg, 44, cx, cy);
   const arrowWing1 = polarToSvg(panelAzimuthDeg - 14, 42, cx, cy);
   const arrowWing2 = polarToSvg(panelAzimuthDeg + 14, 42, cx, cy);
 
-  // Barra del panel solar (perpendicular a la normal)
+  // Solar panel bar (perpendicular to normal)
   const barLeft = polarToSvg(panelAzimuthDeg - 90, 24, cx, cy);
   const barRight = polarToSvg(panelAzimuthDeg + 90, 24, cx, cy);
 
-  // Cono de captación frontal (±90° respecto a la normal)
+  // Forward collection cone (±90° relative to normal)
   const coneRadius = 40;
   const coneLeft = polarToSvg(panelAzimuthDeg - 90, coneRadius, cx, cy);
   const coneRight = polarToSvg(panelAzimuthDeg + 90, coneRadius, cx, cy);
   const conePath = `M ${cx} ${cy} L ${coneLeft.x} ${coneLeft.y} A ${coneRadius} ${coneRadius} 0 0 1 ${coneRight.x} ${coneRight.y} Z`;
 
-  // Arco visual desde 0° Norte hasta el acimut del panel (sentido horario)
+  // Visual arc from 0° North to panel azimuth (clockwise)
   const rArc = 58;
   const arcEnd = polarToSvg(panelAzimuthDeg, rArc, cx, cy);
   const largeArcFlag = panelAzimuthDeg > 180 ? 1 : 0;
   const hasArc = panelAzimuthDeg >= 1 && panelAzimuthDeg <= 359;
   const arcPath = `M ${cx} ${cy - rArc} A ${rArc} ${rArc} 0 ${largeArcFlag} 1 ${arcEnd.x} ${arcEnd.y}`;
 
-  // Posiciones de cuerpos celestes
+  // Celestial body positions
   const sunPos = sunAzimuthDeg !== null ? polarToSvg(sunAzimuthDeg, rCompass, cx, cy) : null;
   const earthPos = earthAzimuthDeg !== null ? polarToSvg(earthAzimuthDeg, rCompass, cx, cy) : null;
   const optimalPos = polarToSvg(optimalAzimuthDeg, rCompass, cx, cy);
 
   const isSunInCone = sunAzimuthDeg !== null ? angularDifference(panelAzimuthDeg, sunAzimuthDeg) <= 90 : false;
 
-  // 12 marcas de graduación cada 30°
+  // 12 graduation ticks every 30°
   const ticks = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((t) => {
     const isCardinal = t % 90 === 0;
     const pInner = polarToSvg(t, isCardinal ? 71 : 75, cx, cy);
@@ -194,7 +215,7 @@ export function SolarAzimuthCompass({
         viewBox="0 0 220 220"
         className="solar-compass-svg"
         role="img"
-        aria-label={`Brújula solar lunar: panel a ${panelAzimuthDeg}°, óptimo a ${optimalAzimuthDeg}°`}
+        aria-label={`${t.comparison.compassAriaPrefix} ${panelAzimuthDeg}°, ${t.comparison.compassOptimalAt} ${optimalAzimuthDeg}°`}
       >
         <defs>
           <radialGradient id="compassBg" cx="50%" cy="50%" r="50%">
@@ -207,11 +228,11 @@ export function SolarAzimuthCompass({
           </radialGradient>
         </defs>
 
-        {/* Círculo base de la brújula */}
+        {/* Compass base circle */}
         <circle cx={cx} cy={cy} r={rCompass} fill="url(#compassBg)" stroke="rgba(255, 255, 255, 0.14)" strokeWidth="1.5" />
         <circle cx={cx} cy={cy} r={rCompass - 18} fill="none" stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="2,2" />
 
-        {/* Sectores de sombra topográfica (montañas bloqueando el Sol) */}
+        {/* Topographic shadow sectors (mountains blocking the Sun) */}
         {shadowSectors.map((sec, idx) => {
           const span = ((sec.endDeg - sec.startDeg + 360) % 360) + 1;
           if (span <= 0) return null;
@@ -227,7 +248,7 @@ export function SolarAzimuthCompass({
                 stroke="rgba(239, 68, 68, 0.6)"
                 strokeWidth="1"
               >
-                <title>Sombra topográfica total: montañas bloquean los 360° de acimut</title>
+                <title>{t.comparison.compassTotalShadowTitle}</title>
               </path>
             );
           }
@@ -248,16 +269,16 @@ export function SolarAzimuthCompass({
               stroke="rgba(239, 68, 68, 0.6)"
               strokeWidth="1"
             >
-              <title>{`Sombra topográfica: montañas bloquean el Sol entre ${sec.startDeg}° y ${sec.endDeg}°`}</title>
+              <title>{`${t.comparison.compassSectorShadowStart} ${sec.startDeg}° ${t.comparison.compassSectorShadowAnd} ${sec.endDeg}°`}</title>
             </path>
           );
         })}
 
-        {/* Ejes Norte-Sur y Este-Oeste */}
+        {/* North-South and East-West axes */}
         <line x1={cx} y1={cy - rCompass} x2={cx} y2={cy + rCompass} stroke="rgba(255, 255, 255, 0.08)" strokeDasharray="2,2" />
         <line x1={cx - rCompass} y1={cy} x2={cx + rCompass} y2={cy} stroke="rgba(255, 255, 255, 0.08)" strokeDasharray="2,2" />
 
-        {/* Marcas horarias cada 30° */}
+        {/* 30° dial ticks */}
         {ticks.map(({ t, pInner, pOuter, isCardinal }) => (
           <line
             key={t}
@@ -270,21 +291,21 @@ export function SolarAzimuthCompass({
           />
         ))}
 
-        {/* Textos de referencia cardinal */}
-        <text x={cx} y={15} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#F87171">
+        {/* Cardinal reference labels */}
+        <text x={cx} y={15} textAnchor="middle" fontSize="10" fontWeight="bold" fill="var(--compass-north-text, #F87171)">
           0° N
         </text>
-        <text x={207} y={113} textAnchor="start" fontSize="9" fontWeight="600" fill="#94A3B8">
+        <text x={207} y={113} textAnchor="start" fontSize="9" fontWeight="600" fill="var(--compass-cardinal-text, #94A3B8)">
           90° E
         </text>
-        <text x={cx} y={214} textAnchor="middle" fontSize="9" fontWeight="600" fill="#94A3B8">
+        <text x={cx} y={214} textAnchor="middle" fontSize="9" fontWeight="600" fill="var(--compass-cardinal-text, #94A3B8)">
           180° S
         </text>
-        <text x={13} y={113} textAnchor="end" fontSize="9" fontWeight="600" fill="#94A3B8">
-          270° O
+        <text x={13} y={113} textAnchor="end" fontSize="9" fontWeight="600" fill="var(--compass-cardinal-text, #94A3B8)">
+          {t.comparison.compassWLabel}
         </text>
 
-        {/* Arco visual desde 0° Norte hasta el acimut del panel */}
+        {/* Visual arc from 0° North to panel azimuth */}
         {hasArc && (
           <path
             d={arcPath}
@@ -295,10 +316,10 @@ export function SolarAzimuthCompass({
           />
         )}
 
-        {/* Semicírculo/cono de captación frontal del panel (±90°) */}
+        {/* Panel forward collection semicircle/cone (±90°) */}
         <path d={conePath} fill="url(#coneGlow)" stroke="rgba(245, 158, 11, 0.6)" strokeWidth="1" />
 
-        {/* Rayo hacia el Sol (si hay muestra temporal) */}
+        {/* Ray toward Sun (if time sample available) */}
         {sunPos && (
           <line
             x1={cx}
@@ -311,7 +332,7 @@ export function SolarAzimuthCompass({
           />
         )}
 
-        {/* Dibujo del panel solar (barra) */}
+        {/* Solar panel bar */}
         <line
           x1={barLeft.x}
           y1={barLeft.y}
@@ -322,7 +343,7 @@ export function SolarAzimuthCompass({
           strokeLinecap="round"
         />
 
-        {/* Flecha vector normal (mira hacia el acimut del panel) */}
+        {/* Normal vector arrow (points toward panel azimuth) */}
         <line
           x1={cx}
           y1={cy}
@@ -336,20 +357,38 @@ export function SolarAzimuthCompass({
           fill="#FBBF24"
         />
 
-        {/* Eje central */}
+        {/* Center pivot */}
         <circle cx={cx} cy={cy} r="3" fill="#E2E8F0" />
 
-        {/* Marcador Acimut Óptimo 🎯 */}
-        <g transform={`translate(${optimalPos.x}, ${optimalPos.y})`}>
+        {/* Optimal Azimuth Marker 🎯 */}
+        <g
+          transform={`translate(${optimalPos.x}, ${optimalPos.y})`}
+          className={onSelectAzimuth ? "solar-compass-marker-btn" : undefined}
+          role={onSelectAzimuth ? "button" : undefined}
+          tabIndex={onSelectAzimuth ? 0 : undefined}
+          aria-label={onSelectAzimuth ? `${t.comparison.compassClickToPointPrefix} ${optimalTargetAz}°` : undefined}
+          onClick={onSelectAzimuth ? () => onSelectAzimuth(optimalTargetAz) : undefined}
+          onKeyDown={onSelectAzimuth ? (e) => handleMarkerKeyDown(e, optimalTargetAz) : undefined}
+        >
+          <title>{`${t.comparison.compassPillOptimal} ${optimalTargetAz}° · ${t.comparison.compassClickToPointPrefix} ${optimalTargetAz}°`}</title>
           <circle r="7.5" fill="#059669" stroke="#34D399" strokeWidth="1.5" />
           <text textAnchor="middle" dy="3" fontSize="8" fill="#FFF" pointerEvents="none">
             🎯
           </text>
         </g>
 
-        {/* Marcador de la Tierra 🜨 */}
-        {earthPos && (
-          <g transform={`translate(${earthPos.x}, ${earthPos.y})`}>
+        {/* Earth Marker 🜨 */}
+        {earthPos && earthTargetAz !== null && (
+          <g
+            transform={`translate(${earthPos.x}, ${earthPos.y})`}
+            className={onSelectAzimuth ? "solar-compass-marker-btn" : undefined}
+            role={onSelectAzimuth ? "button" : undefined}
+            tabIndex={onSelectAzimuth ? 0 : undefined}
+            aria-label={onSelectAzimuth ? `${t.comparison.compassClickToPointPrefix} ${earthTargetAz}°` : undefined}
+            onClick={onSelectAzimuth ? () => onSelectAzimuth(earthTargetAz) : undefined}
+            onKeyDown={onSelectAzimuth ? (e) => handleMarkerKeyDown(e, earthTargetAz) : undefined}
+          >
+            <title>{`${t.comparison.compassPillEarth} ${earthAzimuthDeg?.toFixed(1)}° · ${t.comparison.compassClickToPointPrefix} ${earthTargetAz}°`}</title>
             <circle r="7.5" fill="#0284C7" stroke="#38BDF8" strokeWidth="1.5" />
             <text textAnchor="middle" dy="3" fontSize="8" fill="#FFF" pointerEvents="none">
               🜨
@@ -357,9 +396,18 @@ export function SolarAzimuthCompass({
           </g>
         )}
 
-        {/* Marcador del Sol ☀️ */}
-        {sunPos && (
-          <g transform={`translate(${sunPos.x}, ${sunPos.y})`}>
+        {/* Sun Marker ☀️ */}
+        {sunPos && sunTargetAz !== null && (
+          <g
+            transform={`translate(${sunPos.x}, ${sunPos.y})`}
+            className={onSelectAzimuth ? "solar-compass-marker-btn" : undefined}
+            role={onSelectAzimuth ? "button" : undefined}
+            tabIndex={onSelectAzimuth ? 0 : undefined}
+            aria-label={onSelectAzimuth ? `${t.comparison.compassClickToPointPrefix} ${sunTargetAz}°` : undefined}
+            onClick={onSelectAzimuth ? () => onSelectAzimuth(sunTargetAz) : undefined}
+            onKeyDown={onSelectAzimuth ? (e) => handleMarkerKeyDown(e, sunTargetAz) : undefined}
+          >
+            <title>{`${t.comparison.compassPillSun} ${sunAzimuthDeg?.toFixed(1)}° · ${t.comparison.compassClickToPointPrefix} ${sunTargetAz}°`}</title>
             <circle
               r="8.5"
               fill="#F59E0B"
@@ -373,58 +421,101 @@ export function SolarAzimuthCompass({
           </g>
         )}
 
-        {/* Aviso de sombra total sobre la brújula si aplica */}
+        {/* Total shadow warning on compass if applicable */}
         {isTotalShadow && (
           <g transform={`translate(${cx}, ${cy})`}>
             <rect x="-82" y="-13" width="164" height="26" rx="5" fill="rgba(15, 23, 42, 0.95)" stroke="rgba(239, 68, 68, 0.75)" strokeWidth="1.5" />
             <text textAnchor="middle" dy="4" fontSize="9" fontWeight="bold" fill="#F87171">
-              🌑 En sombra topográfica total
+              {t.comparison.compassTotalShadowWarning}
             </text>
           </g>
         )}
       </svg>
 
-      {/* Píldoras con acimuts exactos */}
+      {/* Pills with exact azimuths */}
       <div className="solar-compass-pills">
         <span className="solar-compass-pill" style={{ borderColor: "rgba(245, 158, 11, 0.4)" }}>
-          📐 Panel: <strong>{panelAzimuthDeg}°</strong>
+          {t.comparison.compassPillPanel} <strong>{panelAzimuthDeg}°</strong>
         </span>
-        <span className="solar-compass-pill" style={{ borderColor: "rgba(16, 185, 129, 0.4)" }}>
-          🎯 Óptimo: <strong>{optimalAzimuthDeg}°</strong>
-        </span>
-        {sunAzimuthDeg !== null && (
-          <span
-            className="solar-compass-pill"
-            style={{
-              borderColor: isSunInCone ? "rgba(251, 191, 36, 0.5)" : "rgba(148, 163, 184, 0.3)",
-              color: isSunInCone ? "var(--solar-amber-bright)" : "var(--text-muted)",
-            }}
+        {onSelectAzimuth ? (
+          <button
+            type="button"
+            className={`solar-compass-pill clickable${panelAzimuthDeg === optimalTargetAz ? " active" : ""}`}
+            style={{ borderColor: "rgba(16, 185, 129, 0.45)" }}
+            onClick={() => onSelectAzimuth(optimalTargetAz)}
+            title={`${t.comparison.compassClickToPointPrefix} ${optimalTargetAz}°`}
+            aria-label={`${t.comparison.compassPillOptimal} ${optimalTargetAz}° · ${t.comparison.compassClickToPointPrefix} ${optimalTargetAz}°`}
           >
-            ☀ Sol: <strong>{sunAzimuthDeg.toFixed(1)}°</strong>
-            {isSunInCone ? " (capta)" : " (espalda)"}
+            {t.comparison.compassPillOptimal} <strong>{optimalTargetAz}°</strong>
+          </button>
+        ) : (
+          <span className="solar-compass-pill" style={{ borderColor: "rgba(16, 185, 129, 0.4)" }}>
+            {t.comparison.compassPillOptimal} <strong>{optimalTargetAz}°</strong>
           </span>
         )}
-        {earthAzimuthDeg !== null && (
-          <span className="solar-compass-pill" style={{ borderColor: "rgba(6, 182, 212, 0.4)" }}>
-            🜨 Tierra: <strong>{earthAzimuthDeg.toFixed(1)}°</strong>
-          </span>
+        {sunAzimuthDeg !== null && sunTargetAz !== null && (
+          onSelectAzimuth ? (
+            <button
+              type="button"
+              className={`solar-compass-pill clickable${panelAzimuthDeg === sunTargetAz ? " active" : ""}`}
+              style={{
+                borderColor: isSunInCone ? "rgba(245, 158, 11, 0.5)" : "rgba(148, 163, 184, 0.35)",
+                color: isSunInCone ? "var(--accent-amber-bright-text)" : "var(--text-muted)",
+              }}
+              onClick={() => onSelectAzimuth(sunTargetAz)}
+              title={`${t.comparison.compassClickToPointPrefix} ${sunTargetAz}°`}
+              aria-label={`${t.comparison.compassPillSun} ${sunTargetAz}° · ${t.comparison.compassClickToPointPrefix} ${sunTargetAz}°`}
+            >
+              {t.comparison.compassPillSun} <strong>{sunAzimuthDeg.toFixed(1)}°</strong>
+              {isSunInCone ? t.comparison.compassCaptures : t.comparison.compassRear}
+            </button>
+          ) : (
+            <span
+              className="solar-compass-pill"
+              style={{
+                borderColor: isSunInCone ? "rgba(245, 158, 11, 0.5)" : "rgba(148, 163, 184, 0.35)",
+                color: isSunInCone ? "var(--accent-amber-bright-text)" : "var(--text-muted)",
+              }}
+            >
+              {t.comparison.compassPillSun} <strong>{sunAzimuthDeg.toFixed(1)}°</strong>
+              {isSunInCone ? t.comparison.compassCaptures : t.comparison.compassRear}
+            </span>
+          )
+        )}
+        {earthAzimuthDeg !== null && earthTargetAz !== null && (
+          onSelectAzimuth ? (
+            <button
+              type="button"
+              className={`solar-compass-pill clickable${panelAzimuthDeg === earthTargetAz ? " active" : ""}`}
+              style={{ borderColor: "rgba(6, 182, 212, 0.45)" }}
+              onClick={() => onSelectAzimuth(earthTargetAz)}
+              title={`${t.comparison.compassClickToPointPrefix} ${earthTargetAz}°`}
+              aria-label={`${t.comparison.compassPillEarth} ${earthTargetAz}° · ${t.comparison.compassClickToPointPrefix} ${earthTargetAz}°`}
+            >
+              {t.comparison.compassPillEarth} <strong>{earthAzimuthDeg.toFixed(1)}°</strong>
+            </button>
+          ) : (
+            <span className="solar-compass-pill" style={{ borderColor: "rgba(6, 182, 212, 0.4)" }}>
+              {t.comparison.compassPillEarth} <strong>{earthAzimuthDeg.toFixed(1)}°</strong>
+            </span>
+          )
         )}
         {shadowSectors.length > 0 && (
-          <span className="solar-compass-pill" style={{ borderColor: "rgba(239, 68, 68, 0.45)", color: "#FCA5A5" }}>
-            ⛰ Sombra ({shadowSectors.reduce((acc, s) => acc + (((s.endDeg - s.startDeg + 360) % 360) + 1), 0)}° bloqueados)
+          <span className="solar-compass-pill danger">
+            {t.comparison.compassShadowPrefix}
+            {shadowSectors.reduce((acc, s) => acc + (((s.endDeg - s.startDeg + 360) % 360) + 1), 0)}
+            {t.comparison.compassShadowBlocked}
           </span>
         )}
       </div>
 
-      {/* Leyenda explicativa oficial */}
-      <p className="solar-compass-legend">
-        0° = Norte Lunar (sentido horario: 90° E, 180° S, 270° O). El panel capta energía cuando su flecha mira hacia el Sol.
-      </p>
+      {/* Explanatory legend */}
+      <p className="solar-compass-legend">{t.comparison.compassLegend}</p>
     </div>
   );
 }
 
-/* ---------------- Perfiles de Misión y Ranking de Viabilidad (RF-02, RF-05) ---------------- */
+/* ---------------- Mission Profiles & Viability Ranking (RF-02, RF-05) ---------------- */
 export type MissionProfileId = "balanced" | "energy" | "comms";
 
 export interface MissionProfileConfig {
@@ -441,20 +532,20 @@ export interface MissionProfileConfig {
 export const MISSION_PROFILES: Record<MissionProfileId, MissionProfileConfig> = {
   balanced: {
     id: "balanced",
-    name: "Equilibrado (Artemis)",
-    shortDesc: "40% Energía Solar · 35% DTE · 25% Supervivencia Térmica",
+    name: "Balanced (Artemis)",
+    shortDesc: "40% Solar Energy · 35% DTE · 25% Thermal Survival",
     weights: { solar: 0.40, dte: 0.35, thermal: 0.25 },
   },
   energy: {
     id: "energy",
-    name: "Prioridad Energía / ISRU",
-    shortDesc: "60% Energía Solar · 20% DTE · 20% Supervivencia Térmica",
+    name: "Energy / ISRU Priority",
+    shortDesc: "60% Solar Energy · 20% DTE · 20% Thermal Survival",
     weights: { solar: 0.60, dte: 0.20, thermal: 0.20 },
   },
   comms: {
     id: "comms",
-    name: "Prioridad Telecomunicaciones",
-    shortDesc: "20% Energía Solar · 60% DTE · 20% Supervivencia Térmica",
+    name: "Comms / DTE Priority",
+    shortDesc: "20% Solar Energy · 60% DTE · 20% Thermal Survival",
     weights: { solar: 0.20, dte: 0.60, thermal: 0.20 },
   },
 };
@@ -474,11 +565,13 @@ export function computeViabilityAssessments(
   metricsByKey: Record<string, SiteSummaryMetrics | undefined>,
   solarEnergyByKey: Record<string, SolarEnergySummary | undefined> | undefined,
   profileId: MissionProfileId,
+  lang: Language = "en",
 ): Record<string, ViabilityAssessment> {
   const profile = MISSION_PROFILES[profileId];
   const { solar: wSolar, dte: wDte, thermal: wThermal } = profile.weights;
+  const tComp = TRANSLATIONS[lang].comparison;
 
-  // Normalizacion de energia de panel fijo entre sitios activos
+  // Fixed panel energy normalization across active sites
   let maxOptimalEnergy = 0;
   for (const s of sites) {
     const sol = solarEnergyByKey?.[s.key];
@@ -517,7 +610,7 @@ export function computeViabilityAssessments(
     }
     dteScore = Math.max(0, Math.min(100, dteScore));
 
-    // 3. Componente Supervivencia Térmica (0..100) - Noche continua ecuatorial ~354 horas
+    // 3. Thermal Survival Component (0..100) - Equatorial continuous night ~354 hours
     let thermalScore = 100;
     if (m) {
       const maxNight = m.longest_darkness_hours;
@@ -538,17 +631,17 @@ export function computeViabilityAssessments(
     let verdictSummary = "";
     if (isWinner) {
       if (profileId === "energy") {
-        verdictSummary = `Máxima captación solar (${item.solarScore.toFixed(0)}% ref.) y alta radiación útil.`;
+        verdictSummary = `${tComp.verdictEnergyWinnerPrefix}${item.solarScore.toFixed(0)}${tComp.verdictEnergyWinnerSuffix}`;
       } else if (profileId === "comms") {
-        verdictSummary = `Líder en conectividad directa con la Tierra (${item.dteScore.toFixed(0)}% enlace continuo).`;
+        verdictSummary = `${tComp.verdictCommsWinnerPrefix}${item.dteScore.toFixed(0)}${tComp.verdictCommsWinnerSuffix}`;
       } else {
-        verdictSummary = `Mejor balance integral entre radiación solar, enlace DTE y supervivencia térmica.`;
+        verdictSummary = tComp.verdictBalancedWinner;
       }
     } else {
       if (item.score < 25) {
-        verdictSummary = `Baja viabilidad: limitación crítica en ${item.dteScore < 10 ? "enlace DTE" : "iluminación solar"}.`;
+        verdictSummary = item.dteScore < 10 ? tComp.verdictLowDte : tComp.verdictLowSolar;
       } else {
-        verdictSummary = `Alternativa secundaria #${rank} (${item.score.toFixed(1)} pts).`;
+        verdictSummary = `${tComp.verdictSecondaryPrefix}${rank} (${item.score.toFixed(1)} ${tComp.ptsUnit}).`;
       }
     }
 
@@ -566,6 +659,38 @@ export function computeViabilityAssessments(
   return results;
 }
 
+export interface SolarArrayConfig {
+  area_m2: number;
+  efficiency_pct: number;
+}
+
+export interface SolarArrayOutput {
+  energy_kwh: number;
+  mean_power_w: number;
+}
+
+export function computeNetElectricalOutput(
+  irradianceKwhM2: number,
+  areaM2: number,
+  efficiencyPct: number,
+  windowDays: number,
+): SolarArrayOutput {
+  const safeIrradiance = Math.max(0, irradianceKwhM2);
+  const safeArea = Math.max(0.1, Math.min(500, areaM2));
+  const safeEff = Math.max(5, Math.min(45, efficiencyPct));
+  const safeHours = Math.max(1, windowDays * 24);
+  const energy_kwh = safeIrradiance * safeArea * (safeEff / 100);
+  const mean_power_w = (energy_kwh * 1000) / safeHours;
+  return { energy_kwh, mean_power_w };
+}
+
+export function formatMeanPower(watts: number): string {
+  if (watts >= 1000) {
+    return `${(watts / 1000).toFixed(2)} kW`;
+  }
+  return `${Math.round(watts)} W`;
+}
+
 export function exportCsvReport(
   selectedSites: LunarCoordinate[],
   curatedSites: CuratedSite[],
@@ -575,40 +700,12 @@ export function exportCsvReport(
   profile: MissionProfileConfig,
   windowDays: number,
   startDateIso?: string,
+  lang: Language = "en",
+  solarArray: SolarArrayConfig = { area_m2: 10.0, efficiency_pct: 30 },
 ) {
+  const tComp = TRANSLATIONS[lang].comparison;
   const epoch = startDateIso ?? "2027-01-01T00:00:00Z";
-  const headers = [
-    "Sitio / Coordenada",
-    "Tipo",
-    "Latitud (deg)",
-    "Longitud (deg)",
-    "Altura Mastil h0 (m)",
-    "Inicio Mision T0 (UTC)",
-    "Ventana (dias)",
-    "Puntuacion Viabilidad (0-100)",
-    "Ranking",
-    "Veredicto",
-    "Acimut Optimo Panel (deg)",
-    "Rumbo Cardinal Optimo",
-    "Energia Panel Vertical Fijo (kWh/m2)",
-    "Energia Panel Tracking 360 (kWh/m2)",
-    "Energia Panel Suelo Horizontal (kWh/m2)",
-    "Iluminacion Solar (%)",
-    "Enlace Directo Tierra DTE (%)",
-    "Ventana Dorada Sol+DTE (%)",
-    "Ventana Dorada (horas netas)",
-    "Blackout DTE Maximo Continuo (horas)",
-    "Noche Continua Maxima (horas)",
-    "Margen Topografico Clearance Actual (deg)",
-    "Holgura Minima (deg)",
-    "Holgura Maxima (deg)",
-    "Distancia Tierra (km)",
-    "Latencia Ida OWLT (s)",
-    "Latencia RTT (s)",
-    "FSPL Banda S 2.2GHz (dB)",
-    "FSPL Banda X 8.4GHz (dB)",
-    "FSPL Banda Ka 32GHz (dB)",
-  ];
+  const headers = tComp.exportCsvHeaders;
 
   const rows: string[][] = [headers];
 
@@ -620,10 +717,38 @@ export function exportCsvReport(
     const dte = m?.advanced_dte;
     const ass = assessments[key];
 
-    const name = curated ? curated.name : `Coord (${coord.lat_deg.toFixed(4)}, ${coord.lon_deg.toFixed(4)})`;
-    const type = curated ? curated.category : "personalizada";
+    const name = curated
+      ? getLocalizedSiteCopy(curated, lang).name
+      : `Coord (${coord.lat_deg.toFixed(4)}, ${coord.lon_deg.toFixed(4)})`;
+    const type = curated
+      ? (tComp.categories[curated.category] ?? curated.category)
+      : (tComp.categories["custom"] ?? "custom");
     const optAz = sol ? Math.round(sol.optimal_azimuth.optimal_panel_azimuth_deg) : "";
     const optCard = sol ? azimuthToCardinal(Number(optAz)) : "";
+    const netFixed = sol
+      ? computeNetElectricalOutput(
+          sol.optimal_azimuth.optimal_fixed_energy_kwh_m2,
+          solarArray.area_m2,
+          solarArray.efficiency_pct,
+          windowDays,
+        )
+      : null;
+    const netTracking = sol
+      ? computeNetElectricalOutput(
+          sol.tracking_vertical_panel.total_energy_kwh_m2,
+          solarArray.area_m2,
+          solarArray.efficiency_pct,
+          windowDays,
+        )
+      : null;
+    const netHoriz = sol
+      ? computeNetElectricalOutput(
+          sol.horizontal_panel.total_energy_kwh_m2,
+          solarArray.area_m2,
+          solarArray.efficiency_pct,
+          windowDays,
+        )
+      : null;
 
     rows.push([
       `"${name.replace(/"/g, '""')}"`,
@@ -656,6 +781,12 @@ export function exportCsvReport(
       dte ? dte.fspl_s_band_db.toFixed(1) : "",
       dte ? dte.fspl_x_band_db.toFixed(1) : "",
       dte ? dte.fspl_ka_band_db.toFixed(1) : "",
+      solarArray.area_m2.toFixed(1),
+      solarArray.efficiency_pct.toFixed(1),
+      netFixed ? netFixed.energy_kwh.toFixed(2) : "",
+      netFixed ? netFixed.mean_power_w.toFixed(1) : "",
+      netTracking ? netTracking.energy_kwh.toFixed(2) : "",
+      netHoriz ? netHoriz.energy_kwh.toFixed(2) : "",
     ]);
   }
 
@@ -681,10 +812,15 @@ export function exportPrintReport(
   profile: MissionProfileConfig,
   windowDays: number,
   startDateIso?: string,
+  lang: Language = "en",
+  solarArray: SolarArrayConfig = { area_m2: 10.0, efficiency_pct: 30 },
 ) {
+  const tComp = TRANSLATIONS[lang].comparison;
+  const pr = tComp.printReport;
+  const localizedProfile = tComp.profiles[profile.id];
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
-    alert("Por favor permite las ventanas emergentes (pop-ups) en tu navegador para ver la Ficha Técnica imprimible.");
+    alert(tComp.popupBlockedAlert);
     return;
   }
 
@@ -702,7 +838,7 @@ export function exportPrintReport(
   }
   const winnerCurated = winnerCoord ? curatedSites.find((s) => s.id === winnerCoord?.site_id) : null;
   const winnerName = winnerCurated
-    ? winnerCurated.name
+    ? getLocalizedSiteCopy(winnerCurated, lang).name
     : winnerCoord
       ? `Coord (${winnerCoord.lat_deg.toFixed(2)}°, ${winnerCoord.lon_deg.toFixed(2)}°)`
       : "N/A";
@@ -716,20 +852,47 @@ export function exportPrintReport(
       const dte = m?.advanced_dte;
       const ass = assessments[key];
       const isWin = ass?.isWinner;
-      const name = curated ? curated.name : `Coord (${coord.lat_deg.toFixed(2)}°, ${coord.lon_deg.toFixed(2)}°)`;
+      const name = curated
+        ? getLocalizedSiteCopy(curated, lang).name
+        : `Coord (${coord.lat_deg.toFixed(2)}°, ${coord.lon_deg.toFixed(2)}°)`;
       const optAz = sol
         ? `${Math.round(sol.optimal_azimuth.optimal_panel_azimuth_deg)}° ${azimuthToCardinal(sol.optimal_azimuth.optimal_panel_azimuth_deg)}`
         : "—";
+      const netFixed = sol
+        ? computeNetElectricalOutput(
+            sol.optimal_azimuth.optimal_fixed_energy_kwh_m2,
+            solarArray.area_m2,
+            solarArray.efficiency_pct,
+            windowDays,
+          )
+        : null;
+      const netTracking = sol
+        ? computeNetElectricalOutput(
+            sol.tracking_vertical_panel.total_energy_kwh_m2,
+            solarArray.area_m2,
+            solarArray.efficiency_pct,
+            windowDays,
+          )
+        : null;
+      const netHoriz = sol
+        ? computeNetElectricalOutput(
+            sol.horizontal_panel.total_energy_kwh_m2,
+            solarArray.area_m2,
+            solarArray.efficiency_pct,
+            windowDays,
+          )
+        : null;
 
       return `
         <tr class="${isWin ? "winner-row" : ""}">
           <td><strong>${isWin ? "🏆 " : `#${ass?.rank ?? "-"} `}${name}</strong></td>
           <td>${coord.lat_deg.toFixed(3)}°, ${coord.lon_deg.toFixed(3)}°</td>
           <td>h₀=${coord.observer_height_m.toFixed(1)}m</td>
-          <td><span class="score-pill">${ass ? ass.score.toFixed(1) : "—"} pts</span></td>
+          <td><span class="score-pill">${ass ? ass.score.toFixed(1) : "—"} ${tComp.ptsUnit}</span></td>
           <td>${optAz}</td>
           <td>${sol ? sol.optimal_azimuth.optimal_fixed_energy_kwh_m2.toFixed(1) : "—"} kWh/m²</td>
           <td>${sol ? sol.tracking_vertical_panel.total_energy_kwh_m2.toFixed(1) : "—"} kWh/m²</td>
+          <td>${netFixed && netTracking && netHoriz ? `<strong>${netFixed.energy_kwh.toFixed(1)} kWh</strong> (${formatMeanPower(netFixed.mean_power_w)}) / ${netTracking.energy_kwh.toFixed(1)} kWh / ${netHoriz.energy_kwh.toFixed(1)} kWh` : "—"}</td>
           <td>${m ? (m.sunlit_fraction * 100).toFixed(1) : "—"}%</td>
           <td>${m ? (m.dte_fraction * 100).toFixed(1) : "—"}%</td>
           <td>${dte ? `${dte.simultaneous_sun_earth_hours.toFixed(1)} h` : "—"}</td>
@@ -742,10 +905,10 @@ export function exportPrintReport(
     .join("");
 
   const html = `<!DOCTYPE html>
-<html lang="es">
+<html lang="${lang}">
 <head>
   <meta charset="utf-8" />
-  <title>Lunar Landing Site Navigator — Ficha Técnica de Misión</title>
+  <title>${pr.title}</title>
   <style>
     @page { size: A4 landscape; margin: 10mm; }
     body {
@@ -765,7 +928,7 @@ export function exportPrintReport(
     .header { border-bottom: 2px solid #0B3D91; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end; }
     .title-block h1 { margin: 0; font-size: 18px; color: #0B3D91; }
     .title-block p { margin: 2px 0 0 0; font-size: 11px; color: #475569; }
-    .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+    .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
     .meta-item { display: flex; flex-direction: column; gap: 1px; }
     .meta-lbl { font-size: 9px; text-transform: uppercase; color: #64748B; font-weight: 600; }
     .meta-val { font-size: 11px; font-weight: 700; color: #0F172A; }
@@ -791,39 +954,43 @@ export function exportPrintReport(
 </head>
 <body>
   <div class="print-bar">
-    <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+    <button class="print-btn" onclick="window.print()">${pr.printBtn}</button>
   </div>
   <div class="header">
     <div class="title-block">
       <h1>LUNAR LANDING SITE NAVIGATOR</h1>
-      <p>NASA Space Apps Challenge 2026 · Informe Ejecutivo de Comparación de Sitios Lunares</p>
+      <p>${pr.subtitle}</p>
     </div>
     <div style="text-align: right; font-size: 10px; color: #64748B;">
-      <div><strong>Sello Científico:</strong> VAL-20261114-02</div>
-      <div>Efemérides JPL DE421 · Aireless lunar</div>
+      <div><strong>${pr.sealLabel}</strong> VAL-20261114-02</div>
+      <div>${pr.ephemNote}</div>
     </div>
   </div>
 
   <div class="meta-grid">
     <div class="meta-item">
-      <span class="meta-lbl">Fecha Emisión</span>
+      <span class="meta-lbl">${pr.issueDate}</span>
       <span class="meta-val">${nowUtc}</span>
     </div>
     <div class="meta-item">
-      <span class="meta-lbl">Inicio Misión T₀ (UTC)</span>
+      <span class="meta-lbl">${pr.missionStart}</span>
       <span class="meta-val">${startDateIso ?? "2027-01-01T00:00:00Z"}</span>
     </div>
     <div class="meta-item">
-      <span class="meta-lbl">Ventana de Simulación</span>
-      <span class="meta-val">${windowDays} días</span>
+      <span class="meta-lbl">${pr.simWindow}</span>
+      <span class="meta-val">${windowDays} ${pr.daysUnit}</span>
     </div>
     <div class="meta-item">
-      <span class="meta-lbl">Perfil de Misión</span>
-      <span class="meta-val">${profile.name}</span>
+      <span class="meta-lbl">${pr.missionProfile}</span>
+      <span class="meta-val">${localizedProfile.name}</span>
     </div>
     <div class="meta-item">
-      <span class="meta-lbl">Ponderación Criterios</span>
-      <span class="meta-val">${profile.shortDesc}</span>
+      <span class="meta-lbl">${pr.solarArraySpec}</span>
+      <span class="meta-val">${solarArray.area_m2.toFixed(1)} m² · ${solarArray.efficiency_pct.toFixed(1)}%</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-lbl">${pr.criteriaWeights}</span>
+      <span class="meta-val">${localizedProfile.shortDesc}</span>
     </div>
   </div>
 
@@ -832,10 +999,10 @@ export function exportPrintReport(
       ? `
   <div class="winner-box">
     <div class="winner-info">
-      <h3>🏆 SITIO ÓPTIMO RECOMENDADO: ${winnerName}</h3>
+      <h3>${pr.winnerHeading} ${winnerName}</h3>
       <p>${winnerAss.verdictSummary}</p>
     </div>
-    <div class="winner-score">${winnerAss.score.toFixed(1)} / 100 pts</div>
+    <div class="winner-score">${winnerAss.score.toFixed(1)} / 100 ${tComp.ptsUnit}</div>
   </div>`
       : ""
   }
@@ -843,19 +1010,20 @@ export function exportPrintReport(
   <table>
     <thead>
       <tr>
-        <th>Sitio / Candidato</th>
-        <th>Coord (Lat, Lon)</th>
-        <th>Mástil</th>
-        <th>Viabilidad</th>
-        <th>Acimut Ópt. Panel</th>
-        <th>Energía Fijo</th>
-        <th>Tracking 360°</th>
-        <th>Sol (%)</th>
-        <th>DTE (%)</th>
-        <th>Ventana Dorada</th>
-        <th>Clearance</th>
-        <th>Latencia RTT</th>
-        <th>FSPL (X / Ka)</th>
+        <th>${pr.colSite}</th>
+        <th>${pr.colCoord}</th>
+        <th>${pr.colMast}</th>
+        <th>${pr.colViability}</th>
+        <th>${pr.colOptAz}</th>
+        <th>${pr.colFixedEnergy}</th>
+        <th>${pr.colTracking}</th>
+        <th>${pr.colNetElectrical}</th>
+        <th>${pr.colSunPct}</th>
+        <th>${pr.colDtePct}</th>
+        <th>${pr.colGolden}</th>
+        <th>${pr.colClearance}</th>
+        <th>${pr.colRtt}</th>
+        <th>${pr.colFspl}</th>
       </tr>
     </thead>
     <tbody>
@@ -864,8 +1032,8 @@ export function exportPrintReport(
   </table>
 
   <div class="footer">
-    <span>Fuentes de datos: NASA LOLA DEM (LRO PDS) · NASA/JPL Horizons Ephemeris API (coord@301) · IAU MOON_ME Frame</span>
-    <span>Página generada por Lunar Landing Site Navigator — Consola de Vuelo</span>
+    <span>${pr.footerLeft}</span>
+    <span>${pr.footerRight}</span>
   </div>
 </body>
 </html>`;
@@ -894,13 +1062,44 @@ export function ComparisonGrid({
   windowDays,
   startDateIso,
   mode,
+  activeVisualSubview = "globe3d",
+  onShowInTerrain3D,
 }: ComparisonGridProps) {
+  const { lang, t } = useLanguage();
   const [customLat, setCustomLat] = useState<string>("-88.50");
   const [customLon, setCustomLon] = useState<string>("15.00");
-  const [missionProfile, setMissionProfile] = useState<MissionProfileId>("balanced");
+  const missionProfile: MissionProfileId = "balanced";
   const [sortBy, setSortBy] = useState<"default" | "viability" | "solar" | "dte" | "golden">("viability");
   const [manualAzimuths, setManualAzimuths] = useState<Record<string, number>>({});
   const [customHeights, setCustomHeights] = useState<Record<string, string>>({});
+  const [pvSimEnabled, setPvSimEnabled] = useState<boolean>(true);
+  const [pvAreaM2, setPvAreaM2] = useState<number>(10.0);
+  const [pvAreaInput, setPvAreaInput] = useState<string>("10.0");
+  const [pvEfficiencyPct, setPvEfficiencyPct] = useState<number>(30);
+  const [pvEffInput, setPvEffInput] = useState<string>("30");
+  const focusedCardRef = useRef<HTMLElement | null>(null);
+
+  const commitPvArea = (raw: string) => {
+    const parsed = Number.parseFloat(raw);
+    if (!Number.isNaN(parsed)) {
+      const clamped = Math.max(0.1, Math.min(500, Math.round(parsed * 10) / 10));
+      setPvAreaM2(clamped);
+      setPvAreaInput(clamped.toFixed(1));
+    } else {
+      setPvAreaInput(pvAreaM2.toFixed(1));
+    }
+  };
+
+  const commitPvEff = (raw: string) => {
+    const parsed = Number.parseFloat(raw);
+    if (!Number.isNaN(parsed)) {
+      const clamped = Math.max(5, Math.min(45, Math.round(parsed * 10) / 10));
+      setPvEfficiencyPct(clamped);
+      setPvEffInput(Number.isInteger(clamped) ? clamped.toString() : clamped.toFixed(1));
+    } else {
+      setPvEffInput(Number.isInteger(pvEfficiencyPct) ? pvEfficiencyPct.toString() : pvEfficiencyPct.toFixed(1));
+    }
+  };
 
   const assessments = useMemo(() => {
     return computeViabilityAssessments(
@@ -908,19 +1107,25 @@ export function ComparisonGrid({
       metricsByKey,
       solarEnergyByKey,
       missionProfile,
+      lang,
     );
-  }, [selectedSites, metricsByKey, solarEnergyByKey, missionProfile]);
+  }, [selectedSites, metricsByKey, solarEnergyByKey, missionProfile, lang]);
 
   const handleCommitHeight = (idx: number, coordKey: string, rawVal: string, fallbackH: number) => {
     const val = Number.parseFloat(rawVal);
-    if (!Number.isNaN(val) && val >= 0.1 && val <= 100.0) {
-      const rounded = Math.round(val * 10) / 10;
-      onChangeSiteHeight?.(idx, rounded);
-      setCustomHeights((prev) => ({ ...prev, [coordKey]: rounded.toString() }));
+    if (!Number.isNaN(val) && val >= 0.0) {
+      const clamped = Math.min(100.0, Math.max(0.0, Math.round(val * 10) / 10));
+      onChangeSiteHeight?.(idx, clamped);
+      setCustomHeights((prev) => ({ ...prev, [keyOrFallback(coordKey)]: clamped.toString() }));
     } else {
-      setCustomHeights((prev) => ({ ...prev, [coordKey]: fallbackH.toFixed(1) }));
+      const safeFallback = Math.min(100.0, Math.max(0.0, fallbackH));
+      setCustomHeights((prev) => ({ ...prev, [coordKey]: safeFallback.toFixed(1) }));
     }
   };
+
+  function keyOrFallback(k: string): string {
+    return k;
+  }
 
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -954,54 +1159,45 @@ export function ComparisonGrid({
     });
   }
 
+  const windowDurationTag =
+    windowDays === 1
+      ? `1 ${t.comparison.daySingularUnit}`
+      : `${windowDays} ${t.comparison.daysUnit}`;
+
   return (
-    <section className="glass-panel comparison-panel" aria-label="Comparador lado a lado de sitios lunares">
+    <section className="glass-panel comparison-panel" aria-label={t.comparison.panelAria}>
       <div className="panel-header">
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <h2 className="panel-title">
-            {mode === "edu"
-              ? "Comparador de Sitios Lunares (Hasta 4 Escenarios Simultáneos)"
-              : "Multi-Site Trade-Off Matrix (Side-by-Side Synchronized Telemetry)"}
+            {mode === "edu" ? t.comparison.titleEdu : t.comparison.titleEng}
           </h2>
+          {mode === "edu" && (
+            <span className="comparator-window-pill" title={t.comparison.eduWindowTitle}>
+              ⏱ {windowDurationTag}
+            </span>
+          )}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           {selectedSites.length > 0 && (
             <button
               type="button"
-              className="hud-btn-mini"
+              className="hud-btn-mini close-all-btn"
               style={{
                 padding: "4px 9px",
                 color: "var(--text-secondary)",
                 borderColor: "rgba(224, 60, 49, 0.45)",
               }}
               onClick={onClearAllSites}
-              title="Cerrar todos los sitios abiertos en el comparador"
+              title={t.comparison.closeAllTitle}
             >
-              ✕ Cerrar todos ({selectedSites.length})
+              <span aria-hidden="true">✕</span>
+              <span>{t.comparison.closeAllBtn} ({selectedSites.length})</span>
             </button>
           )}
 
-          {/* Selector de Perfil de Misión */}
-          <div className="mission-profile-control">
-            <label htmlFor="mission-profile-select" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-              🎯 Perfil:
-            </label>
-            <select
-              id="mission-profile-select"
-              className="hud-select"
-              value={missionProfile}
-              onChange={(e) => setMissionProfile(e.target.value as MissionProfileId)}
-              title={MISSION_PROFILES[missionProfile].shortDesc}
-            >
-              <option value="balanced">Equilibrado (Artemis)</option>
-              <option value="energy">Prioridad Energía / ISRU</option>
-              <option value="comms">Prioridad Telecomunicaciones</option>
-            </select>
-          </div>
-
           <label htmlFor="sort-metrics-select" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-            Ordenar:
+            {t.comparison.sortLabel}
           </label>
           <select
             id="sort-metrics-select"
@@ -1009,14 +1205,27 @@ export function ComparisonGrid({
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as "default" | "viability" | "solar" | "dte" | "golden")}
           >
-            <option value="viability">🏆 Viabilidad (Ranking)</option>
-            <option value="solar">Mayor Iluminación Solar (%)</option>
-            <option value="dte">Mayor Visibilidad Tierra DTE (%)</option>
-            <option value="golden">Mayor Ventana Dorada (Sol + DTE)</option>
-            <option value="default">Orden de selección</option>
+            <option value="viability">{t.comparison.sortViability}</option>
+            <option value="solar">{t.comparison.sortSolar}</option>
+            <option value="dte">{t.comparison.sortDte}</option>
+            <option value="golden">{t.comparison.sortGolden}</option>
+            <option value="default">{t.comparison.sortDefault}</option>
           </select>
 
-          {/* Botones de Exportación (Exclusivos Modo Ingeniero) */}
+          {/* Engineer Mode: PV Array Simulator Toggle & Export Buttons */}
+          {mode === "eng" && (
+            <button
+              type="button"
+              id="pv-array-toggle-btn"
+              className={`hud-btn-mini pv-toggle-btn ${pvSimEnabled ? "active" : ""}`}
+              aria-expanded={pvSimEnabled}
+              onClick={() => setPvSimEnabled((prev) => !prev)}
+              title={t.comparison.pvToggleTitle}
+            >
+              {t.comparison.pvToggleBtn}
+            </button>
+          )}
+
           {mode === "eng" && selectedSites.length > 0 && (
             <div className="export-btn-group">
               <button
@@ -1032,11 +1241,13 @@ export function ComparisonGrid({
                     MISSION_PROFILES[missionProfile],
                     windowDays,
                     startDateIso,
+                    lang,
+                    { area_m2: pvAreaM2, efficiency_pct: pvEfficiencyPct },
                   )
                 }
-                title="Descargar informe completo en formato CSV (.csv)"
+                title={t.comparison.exportCsvTitle}
               >
-                📊 Exportar CSV
+                {t.comparison.exportCsvBtn}
               </button>
               <button
                 type="button"
@@ -1051,23 +1262,119 @@ export function ComparisonGrid({
                     MISSION_PROFILES[missionProfile],
                     windowDays,
                     startDateIso,
+                    lang,
+                    { area_m2: pvAreaM2, efficiency_pct: pvEfficiencyPct },
                   )
                 }
-                title="Generar Ficha Técnica ejecutiva e imprimir / guardar como PDF"
+                title={t.comparison.exportPdfTitle}
               >
-                📄 Ficha Técnica (PDF)
+                {t.comparison.exportPdfBtn}
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Barra de seleccion de los 9 sitios curados + entrada de coordenadas personalizadas */}
+      {/* Engineer Mode Only: Interactive Photovoltaic Array Parameter Bar */}
+      {mode === "eng" && pvSimEnabled && (
+        <div className="pv-array-bar" role="region" aria-label={t.comparison.pvToggleBtn}>
+          <div className="pv-control-group">
+            <label htmlFor="pv-area-input" className="pv-control-label">
+              {t.comparison.pvAreaLabel}
+            </label>
+            <input
+              id="pv-area-input"
+              type="number"
+              step="0.1"
+              min="0.1"
+              max="500"
+              className="hud-input mono-telemetry pv-number-input"
+              value={pvAreaInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setPvAreaInput(raw);
+                const parsed = Number.parseFloat(raw);
+                if (!Number.isNaN(parsed) && parsed >= 0.1 && parsed <= 500) {
+                  setPvAreaM2(parsed);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitPvArea(pvAreaInput);
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={() => commitPvArea(pvAreaInput)}
+              aria-label={t.comparison.pvAreaAria}
+            />
+            <span className="pv-unit-label">{t.comparison.pvAreaUnit}</span>
+
+            <div className="pv-preset-chips">
+              {[
+                { area: 2.0, label: t.comparison.pvPresetRover },
+                { area: 10.0, label: t.comparison.pvPresetLander },
+                { area: 40.0, label: t.comparison.pvPresetBase },
+              ].map((preset) => (
+                <button
+                  key={preset.area}
+                  type="button"
+                  className={`mast-chip-btn ${Math.abs(pvAreaM2 - preset.area) < 0.05 ? "active" : ""}`}
+                  onClick={() => {
+                    setPvAreaM2(preset.area);
+                    setPvAreaInput(preset.area.toFixed(1));
+                  }}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="pv-control-group">
+            <label htmlFor="pv-efficiency-input" className="pv-control-label">
+              {t.comparison.pvEffLabel}
+            </label>
+            <input
+              id="pv-efficiency-input"
+              type="number"
+              step="0.5"
+              min="5"
+              max="45"
+              className="hud-input mono-telemetry pv-number-input"
+              style={{ width: "68px" }}
+              value={pvEffInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setPvEffInput(raw);
+                const parsed = Number.parseFloat(raw);
+                if (!Number.isNaN(parsed) && parsed >= 5 && parsed <= 45) {
+                  setPvEfficiencyPct(parsed);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitPvEff(pvEffInput);
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={() => commitPvEff(pvEffInput)}
+              aria-label={t.comparison.pvEffAria}
+            />
+            <span className="pv-unit-label">% ({t.comparison.pvEffNote})</span>
+          </div>
+        </div>
+      )}
+
+      {/* Curated sites selection bar + custom coordinate entry */}
       <div className="site-selector-bar">
-        <div className="site-chips" role="group" aria-label="Catalogo de sitios curados">
+        <div className="site-chips" role="group" aria-label={t.comparison.catalogAria}>
           {curatedSites.map((site) => {
             const isSelected = selectedSites.some((s) => s.site_id === site.id);
             const isFocused = selectedSites[focusedIndex]?.site_id === site.id;
+            const localizedSite = getLocalizedSiteCopy(site, lang);
+            const shortName = getShortSiteName(site, lang);
             return (
               <button
                 key={site.id}
@@ -1076,52 +1383,86 @@ export function ComparisonGrid({
                 onClick={() => onToggleCuratedSite(site)}
                 title={
                   isSelected
-                    ? `Clic para quitar ${site.name} del comparador`
-                    : `Añadir ${site.name} (${site.lat_deg}°, ${site.lon_deg}°)`
+                    ? `${t.comparison.removeSiteChipTitlePrefix} ${localizedSite.name} ${t.comparison.removeSiteChipTitleSuffix}`
+                    : `${t.comparison.addSiteChipTitlePrefix} ${localizedSite.name} (${site.lat_deg}°, ${site.lon_deg}°)`
                 }
               >
-                {isSelected ? "✓ " : "+ "}
-                {site.name.split("-")[0]?.split("(")[0]?.trim()}
-                {isSelected ? " ✕" : ""}
+                {!isSelected ? (
+                  <>
+                    <span className="site-chip-icon" aria-hidden="true">+</span>
+                    <span>{shortName}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{shortName}</span>
+                    <span className="site-chip-icon" aria-hidden="true">✕</span>
+                  </>
+                )}
               </button>
             );
           })}
         </div>
 
         {mode === "eng" && (
-          <form onSubmit={handleCustomSubmit} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <input
-              type="number"
-              step="0.01"
-              min="-90"
-              max="90"
-              className="hud-input mono-telemetry"
-              style={{ width: "78px" }}
-              value={customLat}
-              onChange={(e) => setCustomLat(e.target.value)}
-              aria-label="Latitud personalizada grados"
-              placeholder="Lat °"
-            />
-            <input
-              type="number"
-              step="0.01"
-              min="-180"
-              max="180"
-              className="hud-input mono-telemetry"
-              style={{ width: "82px" }}
-              value={customLon}
-              onChange={(e) => setCustomLon(e.target.value)}
-              aria-label="Longitud personalizada grados"
-              placeholder="Lon °"
-            />
+          <form onSubmit={handleCustomSubmit} style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "var(--text-secondary)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span>{t.comparison.latPlaceholder}</span>
+              <input
+                type="number"
+                step="0.01"
+                min="-90"
+                max="90"
+                className="hud-input mono-telemetry"
+                style={{ width: "78px" }}
+                value={customLat}
+                onChange={(e) => setCustomLat(e.target.value)}
+                aria-label={t.comparison.latAria}
+                placeholder={t.comparison.latPlaceholder}
+              />
+            </label>
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "var(--text-secondary)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span>{t.comparison.lonPlaceholder}</span>
+              <input
+                type="number"
+                step="0.01"
+                min="-180"
+                max="180"
+                className="hud-input mono-telemetry"
+                style={{ width: "82px" }}
+                value={customLon}
+                onChange={(e) => setCustomLon(e.target.value)}
+                aria-label={t.comparison.lonAria}
+                placeholder={t.comparison.lonPlaceholder}
+              />
+            </label>
             <button type="submit" className="hud-btn-mini" style={{ padding: "6px 10px" }}>
-              Evaluar Coord.
+              {t.comparison.evaluateCoordBtn}
             </button>
           </form>
         )}
       </div>
 
-      {/* Tarjetas comparativas lado a lado (escritorio) / deslizables (movil) */}
+      {/* Side-by-side (desktop) / swipeable (mobile) comparison cards */}
       <div className="comparison-cards-grid">
         {indexedSites.length === 0 && (
           <div
@@ -1136,16 +1477,18 @@ export function ComparisonGrid({
               fontSize: "13px",
             }}
           >
-            <strong>No hay ningún sitio abierto en el comparador.</strong>
+            <strong>{t.comparison.emptyTitle}</strong>
             <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "12px" }}>
-              {mode === "edu"
-                ? "Haz clic en cualquiera de los chips superiores (+) o selecciona un hito en el Globo Lunar 3D para añadirlo a la comparativa."
-                : "Haz clic en cualquiera de los chips superiores (+), introduce una coordenada lunar personalizada o selecciona un punto en el Globo Lunar 3D para añadirlo."}
+              {mode === "edu" ? t.comparison.emptyEdu : t.comparison.emptyEng}
             </p>
           </div>
         )}
         {indexedSites.map(({ coord, index, key, metrics, assessment }) => {
           const curated = curatedSites.find((c) => c.id === coord.site_id);
+          const localizedCurated = curated ? getLocalizedSiteCopy(curated, lang) : null;
+          const displaySiteName = localizedCurated
+            ? localizedCurated.name
+            : `${t.comparison.customSiteTitle} (${coord.lat_deg.toFixed(2)}°, ${coord.lon_deg.toFixed(2)}°)`;
           const sample = currentSampleByKey[key];
           const solar = solarEnergyByKey?.[key];
           const isFocused = index === focusedIndex;
@@ -1160,59 +1503,55 @@ export function ComparisonGrid({
           return (
             <article
               key={key}
+              ref={isFocused ? focusedCardRef : null}
               className={`site-card ${isFocused ? "focused" : ""}`}
               onClick={() => onFocusIndex(index)}
-              aria-label={`Tarjeta comparativa de ${curated?.name ?? "Coordenada personalizada"}`}
+              aria-label={`${t.comparison.cardAriaPrefix} ${localizedCurated?.name ?? t.comparison.customSiteTitle}`}
             >
-              {/* Veredicto y Ranking de Viabilidad de Misión (RF-02, RF-05) */}
+              {/* Mission Viability Verdict & Ranking (RF-02, RF-05) */}
               {assessment && (
                 <div className={`viability-banner ${assessment.isWinner ? "winner" : "rank"}`}>
                   <div className="viability-badge-row">
                     <div className="viability-badge">
                       {assessment.isWinner ? (
-                        <span>🏆 SITIO ÓPTIMO</span>
+                        <span>{t.comparison.optimalSiteBadge}</span>
                       ) : (
-                        <span>#{assessment.rank} Viabilidad</span>
+                        <span>#{assessment.rank} {t.comparison.viabilityRankLabel}</span>
                       )}
                     </div>
-                    <span className="viability-score-num">{assessment.score.toFixed(1)} pts</span>
+                    <span className="viability-score-num">
+                      {assessment.score.toFixed(1)} {t.comparison.ptsUnit}
+                    </span>
                   </div>
                   <p className="viability-reason">{assessment.verdictSummary}</p>
-                  <div className="viability-pillars">
-                    <span>☀ Sol: {assessment.solarScore}%</span>
-                    <span>·</span>
-                    <span>🜨 DTE: {assessment.dteScore}%</span>
-                    <span>·</span>
-                    <span>🛡 Térm: {assessment.thermalScore}%</span>
-                  </div>
                 </div>
               )}
 
               <div className="site-card-header">
                 <div>
-                  <h3 className="site-card-title">
-                    {curated ? curated.name : `Sitio Personalizado (${coord.lat_deg.toFixed(2)}°)`}
-                  </h3>
+                  <h3 className="site-card-title">{displaySiteName}</h3>
                   <div className="mono-telemetry" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Lat {coord.lat_deg.toFixed(4)}° · Lon {coord.lon_deg.toFixed(4)}° · h₀={coord.observer_height_m.toFixed(1)}m
+                    Lat {coord.lat_deg.toFixed(4)}° · Lon {coord.lon_deg.toFixed(4)}°
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <span className="category-tag">
-                    {curated ? curated.category.replace("_", " ") : "custom"}
+                    {toSentenceCase(
+                      curated
+                        ? (t.comparison.categories[curated.category] ?? curated.category.replace("_", " "))
+                        : (t.comparison.categories["custom"] ?? "custom"),
+                    )}
                   </span>
                   <button
                     type="button"
-                    className="hud-btn-mini"
+                    className="hud-btn-mini card-remove-btn"
                     style={{
                       padding: "2px 7px",
                       fontSize: "11px",
                       lineHeight: 1.2,
-                      color: "var(--text-secondary)",
-                      borderColor: "rgba(255, 255, 255, 0.16)",
                     }}
-                    title="Quitar este sitio del comparador"
-                    aria-label={`Quitar ${curated?.name ?? "sitio personalizado"} del comparador`}
+                    title={t.comparison.removeCardTitle}
+                    aria-label={`${t.comparison.removeCardAriaPrefix} ${localizedCurated?.name ?? t.comparison.customSiteTitle} ${t.comparison.removeSiteChipTitleSuffix}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       onRemoveSite(index);
@@ -1223,48 +1562,132 @@ export function ComparisonGrid({
                 </div>
               </div>
 
-              {/* Selector interactivo de Altura de Mastil Solar (RF-05, RT-02) */}
+              {/* Direct view selector bar for 3D Viewer / LOLA 3D Map */}
+              <div
+                className={`card-view-bar ${isFocused ? (activeVisualSubview === "terrain3d" ? "terrain-active" : "focused") : ""}`}
+              >
+                {isFocused && activeVisualSubview === "terrain3d" ? (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "11.5px",
+                      fontWeight: 700,
+                      color: "var(--accent-emerald-text)",
+                    }}
+                  >
+                    {t.comparison.showingInTerrain}
+                  </span>
+                ) : isFocused ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: "6px", flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        fontSize: "11.5px",
+                        fontWeight: 700,
+                        color: "var(--accent-blue-text)",
+                      }}
+                    >
+                      {t.comparison.activeInViewer}
+                    </span>
+                    <button
+                      type="button"
+                      className="hud-btn-mini"
+                      style={{
+                        background: "linear-gradient(135deg, #0B3D91 0%, #1E62D0 100%)",
+                        color: "#FFFFFF",
+                        borderColor: "rgba(96, 165, 250, 0.65)",
+                        fontWeight: 700,
+                        padding: "4px 10px",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShowInTerrain3D?.(index);
+                      }}
+                      title={t.comparison.showInTerrainTitle}
+                    >
+                      {t.comparison.showInTerrainBtn}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="hud-btn-mini terrain-focus-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onShowInTerrain3D) {
+                        onShowInTerrain3D(index);
+                      } else {
+                        onFocusIndex(index);
+                      }
+                    }}
+                    title={t.comparison.focusAndShowInTerrainTitle}
+                  >
+                    {t.comparison.showInTerrainBtn}
+                  </button>
+                )}
+              </div>
+
+              {/* Interactive Solar Mast Height Selector (presets 0.5–3.5 m, free entry up to 100 m in Engineer Mode) */}
               <div className="mast-height-selector-row" onClick={(e) => e.stopPropagation()}>
                 <div className="mast-height-label">
-                  <span>📡 Altura Mástil / Placas:</span>
-                  <strong className="mono-telemetry" style={{ color: "#93C5FD" }}>
+                  <span>{t.comparison.mastHeightLabel}</span>
+                  <strong className="mono-telemetry" style={{ color: "var(--accent-blue-text)" }}>
                     h₀ = {coord.observer_height_m.toFixed(1)} m
                   </strong>
                 </div>
 
                 {mode === "edu" ? (
-                  /* Modo Educativo: 4 botones rapidos con presets de misiones reales */
-                  <div className="mast-height-buttons" role="group" aria-label={`Altura de mástil para ${curated?.name ?? "sitio"}`}>
-                    {[
-                      { h: 0.5, name: "0.5 m", label: "LEAP" },
-                      { h: 1.5, name: "1.5 m", label: "VIPER" },
-                      { h: 3.5, name: "3.5 m", label: "CLPS" },
-                      { h: 10.0, name: "10.0 m", label: "Artemis" },
-                    ].map((opt) => {
-                      const isActive = Math.abs(coord.observer_height_m - opt.h) < 0.1;
-                      return (
-                        <button
-                          key={opt.h}
-                          type="button"
-                          className={`mast-height-btn ${isActive ? "active" : ""}`}
-                          onClick={() => onChangeSiteHeight?.(index, opt.h)}
-                          title={`Cambiar altura de placas solares a ${opt.h} m (${opt.label}) para superar sombras locales`}
-                        >
-                          <span>{opt.name}</span>
-                          <span className="mast-sublabel">{opt.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  /* Educational Mode: Dropdown synchronized with HARDWARE_PROFILES (0.5 m to 3.5 m) */
+                  (() => {
+                    const presets = [
+                      { h: 0.5, name: "0.5 m", label: "CSA LEAP" },
+                      { h: 1.5, name: "1.5 m", label: "CSA Rover" },
+                      { h: 2.0, name: "2.0 m", label: "Artemis EVA" },
+                      { h: 2.2, name: "2.2 m", label: "Artemis LTV" },
+                      { h: 3.5, name: "3.5 m", label: "CLPS Lander" },
+                    ];
+                    const clampedH = Number(coord.observer_height_m.toFixed(1));
+                    const matchedPreset = presets.find((p) => Math.abs(p.h - clampedH) < 0.08);
+                    const selectValue = matchedPreset ? matchedPreset.h : clampedH;
+                    return (
+                      <select
+                        className="hud-select"
+                        style={{ width: "100%", padding: "6px 10px", fontSize: "12px" }}
+                        aria-label={`${t.comparison.mastHeightAriaPrefix} ${displaySiteName}`}
+                        value={selectValue}
+                        onChange={(e) => {
+                          const nextH = Number.parseFloat(e.target.value);
+                          if (!Number.isNaN(nextH)) {
+                            onChangeSiteHeight?.(index, nextH);
+                          }
+                        }}
+                      >
+                        {!matchedPreset && (
+                          <option value={clampedH}>
+                            {clampedH.toFixed(1)} m
+                          </option>
+                        )}
+                        {presets.map((opt) => (
+                          <option key={opt.h} value={opt.h}>
+                            {opt.name} ({opt.label})
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  })()
                 ) : (
-                  /* Modo Ingeniero: Input numerico libre [0.1 m .. 100.0 m] con soporte para decimales */
+                  /* Engineer Mode: Free numeric input [0 .. 100 m] and quick HARDWARE_PROFILES presets */
                   <div className="mast-height-eng-box">
                     <div className="mast-height-input-row">
                       <input
                         type="number"
                         step="0.1"
-                        min="0.1"
-                        max="100.0"
+                        min="0"
+                        max="100"
                         className="mast-number-input"
                         value={customHeights[key] ?? coord.observer_height_m.toString()}
                         onChange={(e) => {
@@ -1275,42 +1698,49 @@ export function ComparisonGrid({
                           if (e.key === "Enter") {
                             e.preventDefault();
                             handleCommitHeight(index, key, customHeights[key] ?? coord.observer_height_m.toString(), coord.observer_height_m);
+                            e.currentTarget.blur();
                           }
                         }}
                         onBlur={() => {
                           handleCommitHeight(index, key, customHeights[key] ?? coord.observer_height_m.toString(), coord.observer_height_m);
                         }}
-                        aria-label={`Altura personalizada en metros para ${curated?.name ?? "sitio"}`}
-                        placeholder="Ej. 2.4"
+                        aria-label={`${t.comparison.customHeightAriaPrefix} ${displaySiteName}`}
+                        placeholder="e.g. 12.0"
                       />
                       <button
                         type="button"
                         className="hud-btn-mini"
                         style={{ padding: "4px 8px", borderColor: "var(--nasa-blue-accent)" }}
                         onClick={() => handleCommitHeight(index, key, customHeights[key] ?? coord.observer_height_m.toString(), coord.observer_height_m)}
-                        title="Aplicar nueva altura de mástil"
+                        title={t.comparison.applyTitle}
                       >
-                        Aplicar
+                        {t.comparison.applyBtn}
                       </button>
                       <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                        (0.1 a 100.0 m)
+                        {t.comparison.heightRangeHint}
                       </span>
                     </div>
 
-                    <div className="mast-preset-chips" role="group" aria-label="Presets rápidos para ingenieros">
-                      {[0.5, 1.5, 2.4, 3.5, 10.0, 15.0].map((presetH) => {
-                        const isActive = Math.abs(coord.observer_height_m - presetH) < 0.05;
+                    <div className="mast-preset-chips" role="group" aria-label={t.comparison.heightPresetsAria}>
+                      {[
+                        { h: 0.5, label: "0.5m CSA LEAP" },
+                        { h: 1.5, label: "1.5m CSA Rover" },
+                        { h: 2.0, label: "2.0m Artemis EVA" },
+                        { h: 2.2, label: "2.2m Artemis LTV" },
+                        { h: 3.5, label: "3.5m CLPS Lander" },
+                      ].map((preset) => {
+                        const isActive = Math.abs(coord.observer_height_m - preset.h) < 0.05;
                         return (
                           <button
-                            key={presetH}
+                            key={preset.h}
                             type="button"
                             className={`mast-chip-btn ${isActive ? "active" : ""}`}
                             onClick={() => {
-                              onChangeSiteHeight?.(index, presetH);
-                              setCustomHeights((prev) => ({ ...prev, [key]: presetH.toString() }));
+                              onChangeSiteHeight?.(index, preset.h);
+                              setCustomHeights((prev) => ({ ...prev, [key]: preset.h.toString() }));
                             }}
                           >
-                            {presetH.toFixed(1)}m
+                            {preset.label}
                           </button>
                         );
                       })}
@@ -1319,86 +1749,86 @@ export function ComparisonGrid({
                 )}
               </div>
 
-              {/* Estado instantaneo en el cursor temporal */}
+              {/* Instantaneous state at current time cursor */}
               {sample && (
                 <div className="telemetry-Now-grid">
                   <div className="body-status-box sun-box">
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
-                      <strong>☀ Sol</strong>
+                      <strong>{t.comparison.sunTitle}</strong>
                       <span
                         className="mono-telemetry"
                         style={{
                           color:
                             sample.sun.state === "visible"
-                              ? "var(--solar-amber-bright)"
+                              ? "var(--accent-amber-bright-text)"
                               : sample.sun.state === "partial"
-                                ? "#FDE047"
+                                ? "var(--accent-amber-text)"
                                 : "var(--text-muted)",
                         }}
                       >
                         {sample.sun.state === "visible"
-                          ? "VISIBLE"
+                          ? t.comparison.stateVisible
                           : sample.sun.state === "partial"
-                            ? `PARCIAL ${(sample.sun.visible_fraction * 100).toFixed(0)}%`
-                            : "OCULTO"}
+                            ? `${t.comparison.statePartial} ${(sample.sun.visible_fraction * 100).toFixed(0)}%`
+                            : t.comparison.stateOcculted}
                       </span>
                     </div>
                     {mode === "eng" ? (
                       <div className="mono-telemetry" style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
                         El {sample.sun.elevation_deg.toFixed(2)}° · Az {sample.sun.azimuth_deg.toFixed(1)}°
                         <br />
-                        Holgura: {sample.sun.clearance_deg >= 0 ? "+" : ""}
+                        {t.comparison.clearanceLabel} {sample.sun.clearance_deg >= 0 ? "+" : ""}
                         {sample.sun.clearance_deg.toFixed(2)}°
                       </div>
                     ) : (
                       <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
                         {sample.sun.visible_fraction > 0
-                          ? "Paneles solares generando energía"
-                          : "Sombra topográfica: usando baterías"}
+                          ? t.comparison.sunPowerEdu
+                          : t.comparison.sunShadowEdu}
                       </div>
                     )}
                   </div>
 
                   <div className="body-status-box earth-box">
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
-                      <strong>🜨 Tierra</strong>
+                      <strong>{t.comparison.earthTitle}</strong>
                       <span
                         className="mono-telemetry"
                         style={{
                           color:
                             sample.earth.clearance_deg >= 0
-                              ? "var(--dte-cyan-bright)"
+                              ? "var(--accent-cyan-text)"
                               : "var(--text-muted)",
                         }}
                       >
-                        {sample.earth.clearance_deg >= 0 ? "DTE ACTIVO" : "SIN ENLACE"}
+                        {sample.earth.clearance_deg >= 0 ? t.comparison.dteActiveBadge : t.comparison.dteNoLinkBadge}
                       </span>
                     </div>
                     {mode === "eng" ? (
                       <div className="mono-telemetry" style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
                         El {sample.earth.elevation_deg.toFixed(2)}° · Az {sample.earth.azimuth_deg.toFixed(1)}°
                         <br />
-                        Holgura: {sample.earth.clearance_deg >= 0 ? "+" : ""}
+                        {t.comparison.clearanceLabel} {sample.earth.clearance_deg >= 0 ? "+" : ""}
                         {sample.earth.clearance_deg.toFixed(2)}°
                       </div>
                     ) : (
                       <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
                         {sample.earth.clearance_deg >= 0
-                          ? "Llamada directa a la Tierra disponible"
-                          : "Tierra oculta tras el horizonte"}
+                          ? t.comparison.dteAvailableEdu
+                          : t.comparison.dteBlockedEdu}
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Barras de metricas acumuladas en la ventana */}
+              {/* Accumulated metrics bars over the window */}
               {metrics && (
                 <>
                   <div className="kpi-bars">
                     <div className="kpi-row">
                       <div className="kpi-label-line">
-                        <span>☀ Luz Solar (Energía)</span>
+                        <span>{t.comparison.kpiSun}</span>
                         <strong className="mono-telemetry">{sunPct}%</strong>
                       </div>
                       <div className="kpi-track">
@@ -1408,7 +1838,7 @@ export function ComparisonGrid({
 
                     <div className="kpi-row">
                       <div className="kpi-label-line">
-                        <span>🜨 Enlace Directo Tierra (DTE)</span>
+                        <span>{t.comparison.kpiDte}</span>
                         <strong className="mono-telemetry">{dtePct}%</strong>
                       </div>
                       <div className="kpi-track">
@@ -1418,8 +1848,8 @@ export function ComparisonGrid({
 
                     <div className="kpi-row">
                       <div className="kpi-label-line">
-                        <span>★ Ventana Dorada (Sol + DTE)</span>
-                        <strong className="mono-telemetry" style={{ color: "#34D399" }}>
+                        <span>{t.comparison.kpiGolden}</span>
+                        <strong className="mono-telemetry" style={{ color: "var(--accent-emerald-text)" }}>
                           {goldenPct}%
                         </strong>
                       </div>
@@ -1429,32 +1859,36 @@ export function ComparisonGrid({
                     </div>
                   </div>
 
-                  <EventCountdown
-                    nextSunset={metrics.next_sunset}
-                    nextEarthset={metrics.next_earthset}
-                    windowDays={windowDays}
-                    mode={mode}
-                  />
+                  {mode === "eng" && (
+                    <>
+                      <EventCountdown
+                        nextSunset={metrics.next_sunset}
+                        nextEarthset={metrics.next_earthset}
+                        windowDays={windowDays}
+                        mode={mode}
+                      />
 
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    <span>
-                      {mode === "edu"
-                        ? `Noche continua máx.: ${(metrics.longest_darkness_hours / 24).toFixed(1)} días`
-                        : `Max Darkness: ${metrics.longest_darkness_hours.toFixed(1)} h · Mean Sun El: ${metrics.mean_sun_elevation_deg.toFixed(2)}°`}
-                    </span>
-                    <span className="mono-telemetry">
-                      {metrics.horizon_source === "spherical_analytical" ? "Esférico" : "LOLA DEM"}
-                    </span>
-                  </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        <span>
+                          {`${t.comparison.maxDarknessEng} ${metrics.longest_darkness_hours.toFixed(1)} h · ${t.comparison.meanSunElEng} ${metrics.mean_sun_elevation_deg.toFixed(2)}°`}
+                        </span>
+                        <span className="mono-telemetry">
+                          {metrics.horizon_source === "spherical_analytical"
+                            ? t.comparison.horizonSpherical
+                            : t.comparison.horizonLolaDem}
+                        </span>
+                      </div>
+                    </>
+                  )}
 
-                  {/* Panel Tecnico de Telecomunicaciones DTE Avanzadas (Exclusivo Modo Ingeniero, RF-02, RF-05, RT-01) */}
+                  {/* Advanced DTE Telecommunications Technical Panel (Engineer Mode only, RF-02, RF-05, RT-01) */}
                   {mode === "eng" && metrics.advanced_dte && (() => {
                     const dte = metrics.advanced_dte;
                     const currentClearance = sample ? sample.earth.clearance_deg : dte.terrain_clearance_deg;
@@ -1468,14 +1902,14 @@ export function ComparisonGrid({
                           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                             <span style={{ fontSize: "13px" }}>📡</span>
                             <strong style={{ fontSize: "11px", color: "var(--dte-cyan-bright)", letterSpacing: "0.5px" }}>
-                              TELECOMUNICACIONES DTE & ENLACE TIERRA (BANDA X / Ka)
+                              {t.comparison.dteHeaderTitle}
                             </strong>
                           </div>
                           <span
                             className={`clearance-badge ${currentClearance >= 0 ? "clear" : "blocked"}`}
-                            title={`Margen angular sobre el relieve lunar: ${currentClearance >= 0 ? "+" : ""}${currentClearance.toFixed(2)}°`}
+                            title={`${t.comparison.clearanceTitlePrefix} ${currentClearance >= 0 ? "+" : ""}${currentClearance.toFixed(2)}°`}
                           >
-                            {currentClearance >= 0 ? "✓ DESPEJADO" : "⚠ BLOQUEADO"} ({currentClearance >= 0 ? "+" : ""}{currentClearance.toFixed(2)}°)
+                            {currentClearance >= 0 ? t.comparison.badgeClear : t.comparison.badgeBlocked} ({currentClearance >= 0 ? "+" : ""}{currentClearance.toFixed(2)}°)
                           </span>
                         </div>
 
@@ -1483,91 +1917,91 @@ export function ComparisonGrid({
                           <div className="dte-relay-alert">
                             <span style={{ fontSize: "15px" }}>🛰️</span>
                             <div>
-                              <strong style={{ color: "#F87171", fontSize: "11px" }}>Sin visión directa a la Tierra (DTE 0.0%)</strong>
+                              <strong style={{ color: "var(--accent-danger-text)", fontSize: "11px" }}>{t.comparison.zeroDteTitle}</strong>
                               <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "var(--text-secondary)", lineHeight: 1.3 }}>
-                                Sin visión directa: requiere satélite relé orbital lunar (ej. Lunar Gateway, Queqiao, Moonlight ESA).
+                                {t.comparison.zeroDteDesc}
                               </p>
                             </div>
                           </div>
                         ) : (
                           <>
-                            {/* Fila 1: Apuntamiento de Antena y Caja de Libracion Terrestre */}
+                            {/* Row 1: Antenna Pointing and Earth Libration Box */}
                             <div className="dte-telemetry-row">
                               <div className="dte-telemetry-cell">
-                                <span className="dte-cell-label">Apuntamiento Antena (Az / El)</span>
+                                <span className="dte-cell-label">{t.comparison.antennaPointingLabel}</span>
                                 <span className="mono-telemetry dte-cell-val">
                                   Az {currentAz.toFixed(1)}° · El {currentEl >= 0 ? "+" : ""}{currentEl.toFixed(2)}°
                                 </span>
                               </div>
                               <div className="dte-telemetry-cell">
-                                <span className="dte-cell-label">Caja de Libración Terrestre</span>
+                                <span className="dte-cell-label">{t.comparison.librationBoxLabel}</span>
                                 <span
                                   className="mono-telemetry dte-cell-val"
-                                  title="Oscilación angular de la Tierra vista desde la superficie lunar en la ventana de misión"
+                                  title={t.comparison.librationBoxTitle}
                                 >
-                                  ±{(dte.earth_azimuth_span_deg / 2).toFixed(1)}° Az · ±{(dte.earth_elevation_span_deg / 2).toFixed(1)}° El (Span {dte.libration_span_deg.toFixed(1)}°)
+                                  ±{(dte.earth_azimuth_span_deg / 2).toFixed(1)}° Az · ±{(dte.earth_elevation_span_deg / 2).toFixed(1)}° El ({t.comparison.spanWord} {dte.libration_span_deg.toFixed(1)}°)
                                 </span>
                               </div>
                             </div>
 
-                            {/* Fila 2: Distancia, Latencia (OWLT / RTT) y Holgura Topográfica min/max */}
+                            {/* Row 2: Distance, Latency (OWLT / RTT), and Min/Max Topographic Clearance */}
                             <div className="dte-telemetry-grid">
                               <div className="dte-grid-cell">
-                                <span className="dte-grid-label">Distancia Tierra</span>
+                                <span className="dte-grid-label">{t.comparison.earthDistanceLabel}</span>
                                 <span className="mono-telemetry dte-grid-value">
-                                  {dte.earth_distance_km.toLocaleString("en-US", { maximumFractionDigits: 0 })} km
+                                  {dte.earth_distance_km.toLocaleString(lang === "es" ? "es-ES" : "en-US", { maximumFractionDigits: 0 })} km
                                 </span>
                               </div>
                               <div className="dte-grid-cell">
-                                <span className="dte-grid-label">Latencia (OWLT / RTT)</span>
+                                <span className="dte-grid-label">{t.comparison.latencyLabel}</span>
                                 <span
                                   className="mono-telemetry dte-grid-value"
-                                  title={`Tiempo de luz en un sentido: ${dte.one_way_light_time_s.toFixed(3)} s · Tiempo de ida y vuelta: ${dte.round_trip_time_s.toFixed(3)} s`}
+                                  title={`${t.comparison.owltRttTitlePrefix} ${dte.one_way_light_time_s.toFixed(3)} s · ${t.comparison.owltRttMid} ${dte.round_trip_time_s.toFixed(3)} s`}
                                 >
                                   {dte.one_way_light_time_s.toFixed(2)}s / {dte.round_trip_time_s.toFixed(2)}s
                                 </span>
                               </div>
                               <div className="dte-grid-cell">
-                                <span className="dte-grid-label">Holgura Mín / Máx</span>
+                                <span className="dte-grid-label">{t.comparison.minMaxClearanceLabel}</span>
                                 <span className="mono-telemetry dte-grid-value">
                                   {dte.min_clearance_deg >= 0 ? "+" : ""}{dte.min_clearance_deg.toFixed(1)}° / +{dte.max_clearance_deg.toFixed(1)}°
                                 </span>
                               </div>
                             </div>
 
-                            {/* Fila 3: Perdidas FSPL ITU-R P.525-4 (Bandas S, X y Ka) */}
+                            {/* Row 3: FSPL Losses ITU-R P.525-4 (S, X, and Ka Bands) */}
                             <div className="dte-fspl-row">
-                              <span className="dte-fspl-title">Pérdidas Espacio Libre (FSPL):</span>
+                              <span className="dte-fspl-title">{t.comparison.fsplTitle}</span>
                               <div className="dte-fspl-chips">
-                                <span className="dte-fspl-chip" title="Banda S (2.2 GHz) - Enlace de comandos y telemetría de ingeniería">
-                                  Banda S (2.2G): <strong>{dte.fspl_s_band_db.toFixed(1)} dB</strong>
+                                <span className="dte-fspl-chip" title={t.comparison.sBandTitle}>
+                                  {t.comparison.sBandChip} <strong>{dte.fspl_s_band_db.toFixed(1)} dB</strong>
                                 </span>
-                                <span className="dte-fspl-chip highlight-x" title="Banda X (8.4 GHz) - Enlace científico primario NASA DSN">
-                                  Banda X (8.4G): <strong>{dte.fspl_x_band_db.toFixed(1)} dB</strong>
+                                <span className="dte-fspl-chip highlight-x" title={t.comparison.xBandTitle}>
+                                  {t.comparison.xBandChip} <strong>{dte.fspl_x_band_db.toFixed(1)} dB</strong>
                                 </span>
-                                <span className="dte-fspl-chip highlight-ka" title="Banda Ka (32.0 GHz) - Banda ancha y video HD lunar">
-                                  Banda Ka (32G): <strong>{dte.fspl_ka_band_db.toFixed(1)} dB</strong>
+                                <span className="dte-fspl-chip highlight-ka" title={t.comparison.kaBandTitle}>
+                                  {t.comparison.kaBandChip} <strong>{dte.fspl_ka_band_db.toFixed(1)} dB</strong>
                                 </span>
                               </div>
                             </div>
 
-                            {/* Fila 4: Corte maximo continuo (Blackout) y Horas de Ventana Dorada */}
+                            {/* Row 4: Max Continuous DTE Blackout and Golden Window Hours */}
                             <div className="dte-window-stats">
                               <div className="dte-stat-item">
-                                <span className="dte-stat-label">Blackout DTE máx. continuo:</span>
+                                <span className="dte-stat-label">{t.comparison.maxBlackoutLabel}</span>
                                 <strong
                                   className="mono-telemetry"
-                                  style={{ color: dte.longest_comms_blackout_hours > 0 ? "#F87171" : "#34D399" }}
+                                  style={{ color: dte.longest_comms_blackout_hours > 0 ? "var(--accent-danger-text)" : "var(--accent-emerald-text)" }}
                                 >
                                   {dte.longest_comms_blackout_hours > 0
                                     ? `${dte.longest_comms_blackout_hours.toFixed(1)} h`
-                                    : "0.0 h (100% continuo)"}
+                                    : t.comparison.continuous100}
                                 </strong>
                               </div>
                               <div className="dte-stat-item">
-                                <span className="dte-stat-label">Ventana Dorada (Sol + DTE):</span>
-                                <strong className="mono-telemetry" style={{ color: "#34D399" }}>
-                                  {dte.simultaneous_sun_earth_hours.toFixed(1)} h netas
+                                <span className="dte-stat-label">{t.comparison.goldenWindowLabel}</span>
+                                <strong className="mono-telemetry" style={{ color: "var(--accent-emerald-text)" }}>
+                                  {dte.simultaneous_sun_earth_hours.toFixed(1)} {t.comparison.netHoursUnit}
                                 </strong>
                               </div>
                             </div>
@@ -1579,12 +2013,12 @@ export function ComparisonGrid({
                 </>
               )}
 
-              {/* Modulo de Energia Solar y Acimut Optimo (RF-05, MATH_MODELS §5) */}
-              {solar && (() => {
-                const optimalAz = Math.round(solar.optimal_azimuth.optimal_panel_azimuth_deg);
+              {/* Solar Energy & Optimal Azimuth Module (RF-05, MATH_MODELS §5) - Engineer Mode Only */}
+              {mode === "eng" && solar && (() => {
+                const optimalAz = normalizeAzimuthDeg(solar.optimal_azimuth.optimal_panel_azimuth_deg);
                 const optimalCardinal = azimuthToCardinal(optimalAz);
                 const optimalEnergy = solar.optimal_azimuth.optimal_fixed_energy_kwh_m2;
-                const currentManualAz = manualAzimuths[key] ?? optimalAz;
+                const currentManualAz = normalizeAzimuthDeg(manualAzimuths[key] ?? optimalAz);
                 const currentManualCardinal = azimuthToCardinal(currentManualAz);
                 const currentManualEnergy = solar.optimal_azimuth.azimuth_energy_curve_kwh_m2[currentManualAz] ?? 0;
                 const trackingEnergy = solar.tracking_vertical_panel.total_energy_kwh_m2;
@@ -1593,84 +2027,114 @@ export function ComparisonGrid({
                 const fixedVsTrackingPct = trackingEnergy > 0 ? ((currentManualEnergy / trackingEnergy) * 100).toFixed(1) : "0.0";
                 const multiplierVsHorizontal = horizontalEnergy > 0.01
                   ? (currentManualEnergy / horizontalEnergy).toFixed(1) + "x"
-                  : currentManualEnergy > 0 ? "∞ (suelo 0 kWh)" : "1.0x";
+                  : currentManualEnergy > 0 ? t.comparison.infGroundZero : "1.0x";
                 const diffFromOptimal = currentManualEnergy - optimalEnergy;
-                const pctLoss = optimalEnergy > 0 ? (((currentManualEnergy - optimalEnergy) / optimalEnergy) * 100).toFixed(1) : "0.0";
+                const pctLossNum = optimalEnergy > 0 ? ((currentManualEnergy - optimalEnergy) / optimalEnergy) * 100 : 0;
+                const pctLossRounded = Number(pctLossNum.toFixed(1));
+                const diffRounded = Number(diffFromOptimal.toFixed(1));
+                const pctLoss = pctLossNum.toFixed(1);
+                const isAlignedWithOptimal =
+                  currentManualAz === optimalAz ||
+                  (optimalEnergy > 0 && (currentManualEnergy >= optimalEnergy - 1e-4 || (pctLossRounded === 0 && diffRounded === 0)));
+                const showMisalignmentWarning =
+                  !isAlignedWithOptimal &&
+                  optimalEnergy > 0 &&
+                  (Math.abs(pctLossRounded) > 0 || Math.abs(diffRounded) > 0);
                 const isTotalShadow =
                   (solar.optimal_azimuth.optimal_fixed_energy_kwh_m2 === 0 &&
                     solar.tracking_vertical_panel.total_energy_kwh_m2 === 0) ||
                   (metrics?.sunlit_fraction === 0.0);
 
+                const netFixed = computeNetElectricalOutput(currentManualEnergy, pvAreaM2, pvEfficiencyPct, windowDays);
+                const netTracking = computeNetElectricalOutput(trackingEnergy, pvAreaM2, pvEfficiencyPct, windowDays);
+                const netHorizontal = computeNetElectricalOutput(horizontalEnergy, pvAreaM2, pvEfficiencyPct, windowDays);
+
                 return (
                   <div className="solar-energy-section" onClick={(e) => e.stopPropagation()}>
                     <div className="solar-energy-header">
-                      <strong style={{ fontSize: "11px", color: "var(--solar-amber-bright)" }}>
-                        ⚡ Radiación Solar AM0 ({solar.solar_constant_am0_w_m2.toFixed(0)} W/m²)
+                      <strong style={{ fontSize: "11px", color: "var(--accent-amber-bright-text)" }}>
+                        {t.comparison.solarHeaderPrefix} ({solar.solar_constant_am0_w_m2.toFixed(0)} W/m²)
                       </strong>
-                      <div
-                        className="solar-optimal-badge"
-                        title="Acimut óptimo para panel vertical fijo: maximiza los kWh/m² evitando bloqueos de montañas lunares"
+                      <button
+                        type="button"
+                        className="solar-optimal-badge clickable"
+                        onClick={() => setManualAzimuths((prev) => ({ ...prev, [key]: optimalAz }))}
+                        title={`${t.comparison.optimalAzimuthTitle} · ${t.comparison.compassClickToPointPrefix} ${optimalAz}°`}
                       >
-                        🎯 Acimut Óptimo: {optimalAz}° {optimalCardinal}
-                      </div>
+                        {t.comparison.optimalAzimuthBadgePrefix} {optimalAz}° {optimalCardinal}
+                      </button>
                     </div>
 
-                    {/* Alerta de noche polar / sombra permanente */}
+                    {/* Polar night / permanent shadow alert */}
                     {isTotalShadow && (
                       <div className="solar-total-shadow-banner">
-                        <strong className="mono-telemetry" style={{ color: "#F87171", fontSize: "11px" }}>
-                          🌑 En sombra topográfica total (0 kWh/m²)
+                        <strong className="mono-telemetry" style={{ color: "var(--accent-danger-text)", fontSize: "11px" }}>
+                          {t.comparison.totalShadowTitle}
                         </strong>
                         <p style={{ margin: "2px 0 0", fontSize: "10.5px", color: "var(--text-secondary)" }}>
-                          Las montañas circundantes bloquean el Sol durante toda la ventana de misión. Los paneles solares no captan energía; la misión requiere baterías o energía nuclear (RTG).
+                          {t.comparison.totalShadowDesc}
                         </p>
                       </div>
                     )}
 
-                    {/* Comparativa de las 3 arquitecturas de paneles */}
+                    {/* Comparison of the 3 panel architectures */}
                     <div className="solar-architectures-list">
-                      {/* 1. Panel Vertical Fijo */}
-                      <div className={`solar-arch-row ${currentManualAz === optimalAz ? "optimal-highlight" : ""}`}>
+                      {/* 1. Fixed Vertical Panel */}
+                      <div className={`solar-arch-row ${isAlignedWithOptimal ? "optimal-highlight" : ""}`}>
                         <div className="solar-arch-top">
                           <span className="solar-arch-title">
-                            📐 Vertical Fijo ({currentManualAz}° {currentManualCardinal})
-                            {currentManualAz === optimalAz && <span style={{ color: "#FDE047", fontSize: "10px" }}>★ Óptimo</span>}
+                            {t.comparison.fixedVerticalLabel} ({currentManualAz}° {currentManualCardinal})
+                            {isAlignedWithOptimal && <span style={{ color: "var(--accent-amber-bright-text)", fontSize: "10px", fontWeight: 700 }}> {t.comparison.starOptimal}</span>}
                           </span>
                           <div className="solar-arch-values">
                             <span className="solar-kwh-value">{currentManualEnergy.toFixed(1)} kWh/m²</span>
                             <span className="solar-efficiency-tag gold">
-                              {fixedVsTrackingPct}% de tracking
+                              {fixedVsTrackingPct}{t.comparison.ofTracking}
                             </span>
                           </div>
                         </div>
+                        {pvSimEnabled && (
+                          <div className="pv-net-output-row highlight">
+                            <span>{t.comparison.pvNetBadgePrefix} ({pvAreaM2.toFixed(1)} m² · {pvEfficiencyPct}%)</span>
+                            <strong className="mono-telemetry">
+                              {netFixed.energy_kwh.toFixed(1)} {t.comparison.pvNetElectricalUnit} ({formatMeanPower(netFixed.mean_power_w)} {t.comparison.pvMeanPowerSuffix})
+                            </strong>
+                          </div>
+                        )}
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text-muted)" }}>
-                          <span>Ventaja vs. plano en suelo:</span>
-                          <strong style={{ color: "#34D399" }}>
-                            {currentManualEnergy > horizontalEnergy ? `+${(currentManualEnergy - horizontalEnergy).toFixed(1)} kWh/m² (${multiplierVsHorizontal})` : "Equivalente"}
+                          <span>{t.comparison.advantageVsFlatLabel}</span>
+                          <strong style={{ color: "var(--accent-emerald-text)" }}>
+                            {currentManualEnergy > horizontalEnergy ? `+${(currentManualEnergy - horizontalEnergy).toFixed(1)} kWh/m² (${multiplierVsHorizontal})` : t.comparison.equivalentLabel}
                           </strong>
                         </div>
                       </div>
 
-                      {/* 2. Panel Vertical Seguimiento 360° */}
+                      {/* 2. 360° Tracking Vertical Panel */}
                       <div className="solar-arch-row">
                         <div className="solar-arch-top">
-                          <span className="solar-arch-title">🔄 Vertical Seguimiento 360°</span>
+                          <span className="solar-arch-title">{t.comparison.verticalTrackingLabel}</span>
                           <div className="solar-arch-values">
                             <span className="solar-kwh-value">{trackingEnergy.toFixed(1)} kWh/m²</span>
-                            <span className="solar-efficiency-tag cyan">100% (Techo)</span>
+                            <span className="solar-efficiency-tag cyan">{t.comparison.ceiling100}</span>
                           </div>
                         </div>
+                        {pvSimEnabled && (
+                          <div className="pv-net-output-row">
+                            <span>{t.comparison.pvNetBadgePrefix}</span>
+                            <strong className="mono-telemetry">
+                              {netTracking.energy_kwh.toFixed(1)} {t.comparison.pvNetElectricalUnit} ({formatMeanPower(netTracking.mean_power_w)} {t.comparison.pvMeanPowerSuffix})
+                            </strong>
+                          </div>
+                        )}
                         <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                          {mode === "edu"
-                            ? "Gira continuamente siguiendo al Sol en el horizonte (máxima energía posible)."
-                            : `Pico: ${solar.tracking_vertical_panel.peak_flux_w_m2.toFixed(1)} W/m² · Media: ${solar.tracking_vertical_panel.mean_flux_w_m2.toFixed(1)} W/m²`}
+                          {`${t.comparison.peakLabel} ${solar.tracking_vertical_panel.peak_flux_w_m2.toFixed(1)} W/m² · ${t.comparison.meanLabel} ${solar.tracking_vertical_panel.mean_flux_w_m2.toFixed(1)} W/m²`}
                         </div>
                       </div>
 
-                      {/* 3. Panel Horizontal en suelo */}
+                      {/* 3. Horizontal Panel on ground */}
                       <div className="solar-arch-row">
                         <div className="solar-arch-top">
-                          <span className="solar-arch-title">⏹ Horizontal en Suelo</span>
+                          <span className="solar-arch-title">{t.comparison.horizontalGroundLabel}</span>
                           <div className="solar-arch-values">
                             <span className="solar-kwh-value">{horizontalEnergy.toFixed(1)} kWh/m²</span>
                             <span className="solar-efficiency-tag slate">
@@ -1678,39 +2142,51 @@ export function ComparisonGrid({
                             </span>
                           </div>
                         </div>
+                        {pvSimEnabled && (
+                          <div className="pv-net-output-row">
+                            <span>{t.comparison.pvNetBadgePrefix}</span>
+                            <strong className="mono-telemetry">
+                              {netHorizontal.energy_kwh.toFixed(1)} {t.comparison.pvNetElectricalUnit} ({formatMeanPower(netHorizontal.mean_power_w)} {t.comparison.pvMeanPowerSuffix})
+                            </strong>
+                          </div>
+                        )}
                         <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                          {mode === "edu"
-                            ? "Tumbado en el suelo lunar (afectado por la baja elevación del Sol en los polos)."
-                            : `Pico: ${solar.horizontal_panel.peak_flux_w_m2.toFixed(1)} W/m² · Media: ${solar.horizontal_panel.mean_flux_w_m2.toFixed(1)} W/m²`}
+                          {`${t.comparison.peakLabel} ${solar.horizontal_panel.peak_flux_w_m2.toFixed(1)} W/m² · ${t.comparison.meanLabel} ${solar.horizontal_panel.mean_flux_w_m2.toFixed(1)} W/m²`}
                         </div>
                       </div>
                     </div>
 
-                    {/* Selector interactivo de Acimut Manual */}
+                    {/* Interactive Manual Azimuth Selector */}
                     <div className="solar-slider-container">
                       <div className="solar-slider-header">
                         <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>
-                          Orientación manual panel fijo:
+                          {t.comparison.manualOrientationLabel}
                         </span>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <strong className="mono-telemetry" style={{ color: currentManualAz === optimalAz ? "#FDE047" : "#E2E8F0" }}>
+                          <strong
+                            className="mono-telemetry"
+                            style={{
+                              color: isAlignedWithOptimal ? "var(--accent-amber-bright-text)" : "var(--text-primary)",
+                              fontWeight: 700,
+                            }}
+                          >
                             {currentManualAz}° {currentManualCardinal}
                           </strong>
-                          {currentManualAz !== optimalAz && (
+                          {!isAlignedWithOptimal && (
                             <button
                               type="button"
                               className="hud-btn-mini"
                               style={{ padding: "1px 6px", fontSize: "10px", borderColor: "var(--solar-amber)" }}
                               onClick={() => setManualAzimuths((prev) => ({ ...prev, [key]: optimalAz }))}
-                              title="Restablecer al acimut óptimo calculado"
+                              title={t.comparison.resetOptimalTitle}
                             >
-                              Reset 🎯 {optimalAz}°
+                              {t.comparison.resetOptimalBtnPrefix} {optimalAz}°
                             </button>
                           )}
                         </div>
                       </div>
 
-                      {/* Brújula Solar Interactiva SVG */}
+                      {/* Interactive SVG Solar Compass */}
                       <SolarAzimuthCompass
                         panelAzimuthDeg={currentManualAz}
                         optimalAzimuthDeg={optimalAz}
@@ -1719,6 +2195,9 @@ export function ComparisonGrid({
                         horizonProfile={horizonByKey?.[key]}
                         samples={seriesByKey?.[key]?.samples}
                         isTotalShadow={isTotalShadow}
+                        onSelectAzimuth={(azDeg) =>
+                          setManualAzimuths((prev) => ({ ...prev, [key]: normalizeAzimuthDeg(azDeg) }))
+                        }
                       />
 
                       <input
@@ -1732,20 +2211,20 @@ export function ComparisonGrid({
                           setManualAzimuths((prev) => ({ ...prev, [key]: val }));
                         }}
                         className="solar-azimuth-slider"
-                        aria-label={`Ajustar acimut del panel fijo para ${curated?.name ?? "sitio"}`}
+                        aria-label={`${t.comparison.adjustAzimuthAriaPrefix} ${displaySiteName}`}
                       />
 
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text-muted)" }}>
                         <span>0° N</span>
                         <span>90° E</span>
                         <span>180° S</span>
-                        <span>270° W</span>
+                        <span>{t.comparison.compassWLabel}</span>
                         <span>359°</span>
                       </div>
 
-                      {currentManualAz !== optimalAz && (
-                        <div style={{ fontSize: "10px", color: "#F87171", textAlign: "right", fontWeight: 600 }}>
-                          ⚠ Desalineación: {pctLoss}% ({diffFromOptimal.toFixed(1)} kWh/m² vs óptimo)
+                      {showMisalignmentWarning && (
+                        <div style={{ fontSize: "10px", color: "var(--accent-danger-text)", textAlign: "right", fontWeight: 600 }}>
+                          {t.comparison.misalignmentPrefix} {pctLoss}% ({diffFromOptimal.toFixed(1)} kWh/m² {t.comparison.misalignmentVsOpt})
                         </div>
                       )}
                     </div>
@@ -1753,25 +2232,25 @@ export function ComparisonGrid({
                 );
               })()}
 
-              {/* Deep-links a LROC QuickMap (nuevo dominio) y NASA Moon Trek */}
+              {/* Deep links to LROC QuickMap (new domain) and NASA Moon Trek */}
               <div className="portal-links-row" onClick={(ev) => ev.stopPropagation()}>
                 <a
                   href={links.quickmap_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="portal-link"
-                  title="Abrir coordenadas en el nuevo dominio oficial de NASA LROC QuickMap (Intuitive Machines)"
+                  title={t.comparison.quickmapTitle}
                 >
-                  ↗ LROC QuickMap
+                  {t.comparison.quickmapBtn}
                 </a>
                 <a
                   href={links.moontrek_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="portal-link"
-                  title="Abrir en NASA Moon Trek (nuestro navegador desbloquea abiertamente el analisis de horizonte restringido en Moon Trek)"
+                  title={t.comparison.moontrekTitle}
                 >
-                  ↗ NASA Moon Trek
+                  {t.comparison.moontrekBtn}
                 </a>
               </div>
             </article>

@@ -1,28 +1,28 @@
-# data/lola_dem — Modelos digitales de elevación LOLA
+# data/lola_dem — LOLA Digital Elevation Models
 
-**Propietario:** `astro-terrain-specialist`. Los GeoTIFF y la caché **no** se versionan en git.
+**Owner:** `astro-terrain-specialist`. GeoTIFF files and cache are **not** committed to git.
 
-## Productos candidatos (confirmar nombre exacto y licencia antes de descargar)
+## Candidate Products (confirm exact name and license before downloading)
 
-| Producto | Resolución | Cobertura | Fuente |
-|----------|-----------|-----------|--------|
-| LOLA south polar DEM (p. ej. `LDEM_80S_20M*`) | 20 m/px | 80°S–90°S | NASA GSFC PGDA / PDS Geosciences Node |
-| LOLA high-res site DEMs (Barker et al.) | 5 m/px | Sitios candidatos Artemis | NASA GSFC PGDA |
-| LOLA global (`LDEM_64` / `SLDEM2015`) | ~118 m / ~59 m | Global (sitios no polares) | PDS Geosciences Node |
+| Product | Resolution | Coverage | Source |
+|---------|------------|----------|--------|
+| LOLA south polar DEM (e.g. `LDEM_80S_20M*`) | 20 m/px | 80°S–90°S | NASA GSFC PGDA / PDS Geosciences Node |
+| LOLA high-res site DEMs (Barker et al.) | 5 m/px | Artemis candidate sites | NASA GSFC PGDA |
+| LOLA global (`LDEM_64` / `SLDEM2015`) | ~118 m / ~59 m | Global (non-polar sites) | PDS Geosciences Node |
 
-## Proyección esperada (verificar en la etiqueta `.lbl` / metadatos GeoTIFF)
+## Expected Projection (verify in `.lbl` label / GeoTIFF metadata)
 
 ```
 +proj=stere +lat_0=-90 +lon_0=0 +k=1 +x_0=0 +y_0=0 +R=1737400 +units=m +no_defs
 ```
 
-Alturas relativas a la esfera de 1737.4 km (comprobar unidades: m vs km y `SCALING_FACTOR`).
+Heights relative to the 1737.4 km reference sphere (verify units: m vs km and `SCALING_FACTOR`).
 
-## Estructura
+## Structure
 
 ```
 lola_dem/
-├── README.md        (este manifiesto)
-├── raw/             (GeoTIFF descargados, ignorados por git)
-└── cache/           (perfiles de horizonte .npz por sitio/DEM/parámetros)
+├── README.md        (this manifest)
+├── raw/             (downloaded GeoTIFFs, gitignored)
+└── cache/           (.npz horizon profiles by site/DEM/parameters)
 ```

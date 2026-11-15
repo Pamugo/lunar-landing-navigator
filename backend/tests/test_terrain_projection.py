@@ -1,6 +1,6 @@
-"""Oraculos de proyeccion estereografica polar LOLA, lectura GeoTIFF, mallas 3D adaptativas y deep-links (RT-02, RF-01, RF-06).
+"""Oracles for LOLA polar stereographic projection, GeoTIFF reading, adaptive 3D meshes, and deep links (RT-02, RF-01, RF-06).
 
-Propietario: qa-verification-agent.
+Owner: qa-verification-agent.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ DEG = math.pi / 180.0
 
 
 class TestTerrainProjectionAndPortals(unittest.TestCase):
-    """Verifica proyeccion estereografica polar sur, portales QuickMap/MoonTrek y catalogo CSA."""
+    """Verifies south polar stereographic projection, QuickMap/MoonTrek portals, and CSA catalog."""
 
     def test_projection_matches_analytical_oracle(self) -> None:
         coords = [
@@ -80,12 +80,12 @@ class TestTerrainProjectionAndPortals(unittest.TestCase):
 
 
 class TestGeoTiffSamplingAndAdaptiveTerrainPatch(unittest.TestCase):
-    """Verifica muestreo bilineal en GeoTIFF estereografico polar y mallas 3D multi-dispositivo."""
+    """Verifies bilinear sampling in polar stereographic GeoTIFFs and multi-device 3D meshes."""
 
     def test_planar_slope_bilinear_interpolation_in_geotiff(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tif_path = Path(tmpdir) / "test_polar.tif"
-            # Campo lineal z(x, y) = 100.0 + 0.01*x - 0.02*y sobre [-20 km, 20 km]
+            # Linear field z(x, y) = 100.0 + 0.01*x - 0.02*y over [-20 km, 20 km]
             create_synthetic_south_pole_dem(
                 tif_path,
                 half_extent_m=20_000.0,
@@ -122,7 +122,7 @@ class TestGeoTiffSamplingAndAdaptiveTerrainPatch(unittest.TestCase):
         self.assertEqual(len(patch_mobile.elevations_m[0]), 32)
         self.assertIn(patch_mobile.horizon_source, {HorizonSource.LOLA_DEM, HorizonSource.LOLA_DEM_CACHED})
 
-        # Coordenada ecuatorial personalizada fuera del DEM polar -> fallback limpio sin error
+        # Custom equatorial coordinate outside the polar DEM -> clean fallback without error
         eq_custom = LunarCoordinate(lat_deg=12.5, lon_deg=40.0, observer_height_m=2.0)
         patch_eq = extract_terrain_patch(
             site=eq_custom,

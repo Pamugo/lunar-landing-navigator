@@ -1,88 +1,88 @@
-# AGENTS.md — Reglas globales del proyecto *Lunar Landing Site Navigator*
+# AGENTS.md — Global Rules for *Lunar Landing Site Navigator*
 
-> Aplica a **todos** los agentes (Claude Code, Antigravity u otros). `CLAUDE.md` importa este archivo.
-> Propietario: `lead-architect-auditor`. Reto: NASA Space Apps Challenge 2026 — *Lunar Landing Site Navigator*.
+> Applies to **all** agents (Claude Code, Antigravity, or others). `CLAUDE.md` imports this file.
+> Owner: `lead-architect-auditor`. Challenge: NASA Space Apps Challenge 2026 — *Lunar Landing Site Navigator*.
 
-## 1. Fuentes de verdad (leer antes de actuar)
+## 1. Sources of Truth (read before acting)
 
-| Tema | Documento |
-|------|-----------|
-| Requisitos y trazabilidad (RF-01..07, RT-01..04) | `docs/CHALLENGE_SPEC.md` |
-| Arquitectura y contratos JSON | `docs/ARCHITECTURE.md`, `backend/app/models/schemas.py` |
-| Ecuaciones | `docs/MATH_MODELS.md` |
-| Evidencia de verificación | `docs/VALIDATION_LOG.md` |
-| Procedimientos especializados | `skills/*/SKILL.md` |
+| Topic | Document |
+|-------|----------|
+| Requirements & traceability (RF-01..07, RT-01..04) | `docs/CHALLENGE_SPEC.md` |
+| Architecture & JSON contracts | `docs/ARCHITECTURE.md`, `backend/app/models/schemas.py` |
+| Equations | `docs/MATH_MODELS.md` |
+| Verification evidence | `docs/VALIDATION_LOG.md` |
+| Specialized procedures | `skills/*/SKILL.md` |
 
-## 2. Convenciones de unidades y formatos (obligatorias)
+## 2. Unit and Formatting Conventions (mandatory)
 
-| Magnitud | API / JSON / UI | Motor interno (`backend/app/services`) |
+| Quantity | API / JSON / UI | Internal Engine (`backend/app/services`) |
 |----------|-----------------|------------------------------------------|
-| Ángulos | **grados decimales** (`*_deg`) | **radianes** (convertir solo en la frontera API↔servicio) |
-| Distancias | **metros** (`*_m`); kilómetros solo con sufijo `*_km` | metros |
-| Tiempo | **UTC ISO-8601** con `Z` (`2027-01-01T00:00:00Z`) | `skyfield.Time` / `datetime` con `tzinfo=UTC` |
-| Duraciones | segundos (`*_s`) u horas (`*_hours`) explícitas | segundos |
-| Coordenadas | lat planetocéntrica [-90, 90]; lon **este-positiva** [-180, 180]; marco **MOON_ME** | ídem |
-| Acimut | desde norte local, horario, [0, 360) | ídem (radianes) |
-| Radio lunar | `R = 1737.4 km` = `1_737_400.0 m` (constante única, no redefinir) | ídem |
+| Angles | **decimal degrees** (`*_deg`) | **radians** (convert only at the API↔service boundary) |
+| Distances | **meters** (`*_m`); kilometers only with `*_km` suffix | meters |
+| Time | **UTC ISO-8601** with `Z` (`2027-01-01T00:00:00Z`) | `skyfield.Time` / `datetime` with `tzinfo=UTC` |
+| Durations | explicit seconds (`*_s`) or hours (`*_hours`) | seconds |
+| Coordinates | planetocentric lat [-90, 90]; **east-positive** lon [-180, 180]; **MOON_ME** frame | same |
+| Azimuth | from local north, clockwise, [0, 360) | same (radians) |
+| Lunar radius | `R = 1737.4 km` = `1_737_400.0 m` (single constant, do not redefine) | same |
 
-Reglas físicas no negociables:
-- **Sin refracción atmosférica** en ninguna capa (la Luna no tiene atmósfera). Cualquier PR que introduzca un término de refracción se rechaza.
-- Nunca usar hora local en cálculos; la conversión a hora local es solo cosmética en Modo Educativo.
-- Las variables llevan el sufijo de unidad (`elevation_deg`, `distance_km`, `theta_rad`).
+Non-negotiable physical rules:
+- **Zero atmospheric refraction** in any layer (the Moon has no atmosphere). Any PR introducing a refraction term is rejected.
+- Never use local time in calculations; local time conversion is purely cosmetic in Educational Mode.
+- Variables carry a unit suffix (`elevation_deg`, `distance_km`, `theta_rad`).
 
-## 3. Propiedad exclusiva de directorios (File Ownership Boundaries)
+## 3. Exclusive Directory Ownership (File Ownership Boundaries)
 
-Un agente **solo escribe** en los paths que posee. Para cambiar algo ajeno, emite una *Change Request* (CR) al propietario
-(en el plan de `/plan-feature` o como comentario en el PR). Leer es libre para todos.
+An agent **only writes** within paths it owns. To change someone else's files, issue a *Change Request* (CR) to the owner
+(in the `/plan-feature` plan or as a PR comment). Reading is open to all.
 
-| Agente | Paths de escritura exclusiva |
-|--------|------------------------------|
-| `lead-architect-auditor` | `docs/` (excepto `docs/MATH_MODELS.md` y `docs/VALIDATION_LOG.md`), `backend/app/models/schemas.py`, `data/curated_sites.json`, `backend/pyproject.toml`, `skills/`, `.claude/`, `.agents/`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `.gitignore` |
+| Agent | Exclusive write paths |
+|-------|-----------------------|
+| `lead-architect-auditor` | `docs/` (except `docs/MATH_MODELS.md` and `docs/VALIDATION_LOG.md`), `backend/app/models/schemas.py`, `data/curated_sites.json`, `backend/pyproject.toml`, `skills/`, `.claude/`, `.agents/`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `.gitignore` |
 | `astro-terrain-specialist` | `backend/app/services/`, `docs/MATH_MODELS.md`, `data/ephemeris/`, `data/lola_dem/` |
 | `fullstack-visualizer` | `frontend/src/`, `frontend/package.json`, `frontend/tsconfig.json`, `frontend/vite.config.ts`, `frontend/index.html`, `backend/app/api/`, `backend/app/main.py` |
 | `qa-verification-agent` | `backend/tests/`, `frontend/tests/`, `scripts/`, `docs/VALIDATION_LOG.md` |
 
-Reglas de colisión:
-1. Un archivo tiene **un único** propietario. Si no aparece en la tabla, pertenece a `lead-architect-auditor`.
-2. El contrato (`schemas.py`) solo lo cambia el lead; `frontend/src/types/contracts.ts` lo actualiza el visualizer **en el mismo cambio** que el lead aprueba.
-3. Los tests de oráculo los escribe **QA**, no el implementador (separación autor/verificador).
-4. Ningún agente modifica un test para hacerlo pasar; si el oráculo es incorrecto, CR a QA con la derivación.
+Collision rules:
+1. Every file has **a single** owner. If not listed in the table, it belongs to `lead-architect-auditor`.
+2. The contract (`schemas.py`) is changed only by the lead; `frontend/src/types/contracts.ts` is updated by the visualizer **in the same change** approved by the lead.
+3. Oracle tests are written by **QA**, not the implementer (author/verifier separation).
+4. No agent modifies a test just to make it pass; if the oracle is wrong, submit a CR to QA with the derivation.
 
-## 4. Protocolo de trabajo
+## 4. Workflow Protocol
 
 ```
-Diseño → Contrato → Test de Oráculo → Implementación → Verificación
+Design → Contract → Oracle Test → Implementation → Verification
 ```
 
-| Fase | Responsable | Entregable | Puerta de salida |
-|------|-------------|-----------|------------------|
-| 1. Diseño | lead + astro | Ecuación en `MATH_MODELS.md` / requisito trazado en `CHALLENGE_SPEC.md` | ID RF/RT asignado |
-| 2. Contrato | lead (+ visualizer espejo TS) | Modelos Pydantic + `contracts.ts` | `verify_environment.py` en verde (paridad) |
-| 3. Test de Oráculo | QA | Test analítico o fixture JPL Horizons, **en rojo o skip** | Test revisado por astro |
-| 4. Implementación | astro (servicios) / visualizer (API+UI) | Código mínimo para pasar el oráculo | Tests en verde localmente |
-| 5. Verificación | QA + lead | Entrada en `VALIDATION_LOG.md` + `/audit-challenge` | Estado RF/RT actualizado con evidencia |
+| Phase | Owner | Deliverable | Exit Gate |
+|-------|-------|-------------|-----------|
+| 1. Design | lead + astro | Equation in `MATH_MODELS.md` / requirement traced in `CHALLENGE_SPEC.md` | RF/RT ID assigned |
+| 2. Contract | lead (+ visualizer TS mirror) | Pydantic models + `contracts.ts` | `verify_environment.py` green (parity) |
+| 3. Oracle Test | QA | Analytical test or JPL Horizons fixture, **red or skipped** | Test reviewed by astro |
+| 4. Implementation | astro (services) / visualizer (API+UI) | Minimal code to pass the oracle | Tests green locally |
+| 5. Verification | QA + lead | Entry in `VALIDATION_LOG.md` + `/audit-challenge` | RF/RT status updated with evidence |
 
-## 5. Comandos estándar
+## 5. Standard Commands
 
-| Acción | Comando (Windows: `python`; Linux/macOS: `python3`) |
+| Action | Command (Windows: `python`; Linux/macOS: `python3`) |
 |--------|------------------------------------------------------|
-| Verificar entorno | `python scripts/verify_environment.py` |
-| Tests de física | `python -m unittest discover -s backend/tests -t backend -v` (o `cd backend && python -m pytest`) |
+| Verify environment | `python scripts/verify_environment.py` |
+| Physics tests | `python -m unittest discover -s backend/tests -t backend -v` (or `cd backend && python -m pytest`) |
 | Backend dev | `cd backend && uvicorn app.main:app --reload` |
 | Frontend dev | `cd frontend && npm install && npm run dev` |
 
-Slash-commands (Claude Code: `.claude/commands/`; Antigravity: pedir "ejecuta el flujo de `.claude/commands/<nombre>.md`"):
+Slash commands (Claude Code: `.claude/commands/`; Antigravity: request "run the workflow in `.claude/commands/<name>.md`"):
 `/verify-env`, `/verify-physics`, `/audit-challenge`, `/plan-feature`.
 
-## 6. Skills y agentes
+## 6. Skills and Agents
 
 - Skills: `skills/lunar-ephemeris`, `skills/lola-topography-horizon`, `skills/mission-comparison-ux`, `skills/spaceapps-compliance`.
-  Antigravity las descubre vía `.agents/skills.json`; en Claude Code, leer el `SKILL.md` correspondiente antes de trabajar en su área.
-- Agentes: definiciones en `.claude/agents/*.md` (Claude Code las carga como subagentes; en Antigravity se usan como *system prompt* al definir subagentes).
+  Antigravity discovers them via `.agents/skills.json`; in Claude Code, read the corresponding `SKILL.md` before working in its domain.
+- Agents: definitions in `.claude/agents/*.md` (Claude Code loads them as subagents; in Antigravity they serve as *system prompts* when defining subagents).
 
-## 7. Calidad mínima
+## 7. Minimum Quality
 
-- Python: tipado completo, `ruff`, docstrings con referencia `MATH_MODELS.md §x.y` en toda función física.
-- TypeScript: `strict`, sin `any`, sin cálculos astronómicos en el cliente.
-- Nada de llamadas de red en tests: las fixtures de JPL Horizons se generan con un script y se versionan.
-- Datos de NASA siempre citados (producto, versión, URL) en `CHALLENGE_SPEC.md §5` y en la UI.
+- Python: full type annotations, `ruff`, docstrings referencing `MATH_MODELS.md §x.y` in every physics function.
+- TypeScript: `strict`, no `any`, no astronomical calculations on the client.
+- No network calls in tests: JPL Horizons fixtures are generated by a script and versioned.
+- NASA data always cited (product, version, URL) in `CHALLENGE_SPEC.md §5` and in the UI.

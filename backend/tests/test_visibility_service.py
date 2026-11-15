@@ -1,6 +1,6 @@
-"""Oraculos del motor de visibilidad, eventos Sunset/Earthset, comparacion multi-sitio y rendimiento (RF-02, RF-04, RF-05, RT-04).
+"""Oracles for the visibility engine, Sunset/Earthset events, multi-site comparison, and performance (RF-02, RF-04, RF-05, RT-04).
 
-Propietario: qa-verification-agent.
+Owner: qa-verification-agent.
 """
 
 from __future__ import annotations
@@ -22,14 +22,14 @@ from app.services.visibility import compare_sites, compute_visibility_timeseries
 
 
 class TestVisibilityAndComparisonService(unittest.TestCase):
-    """Verifica series temporales de visibilidad, eventos, metricas agregadas y presupuesto < 2 s."""
+    """Verifies visibility time series, events, aggregate metrics, and < 2 s runtime budget."""
 
     @classmethod
     def setUpClass(cls) -> None:
         ensure_curated_Master_cache()
 
     def test_thirty_day_visibility_performance_under_two_seconds(self) -> None:
-        """RT-04: serie de 30 dias a paso de 1 hora (721 muestras) con horizonte cacheado en < 2.0 s."""
+        """RT-04: 30-day time series at 1-hour step (721 samples) with cached horizon in < 2.0 s."""
         site = LunarCoordinate(lat_deg=-89.68, lon_deg=-166.0, observer_height_m=2.0, site_id="shackleton-rim")
         window = TimeWindow(
             start_utc=datetime(2027, 1, 1, 0, 0, tzinfo=UTC),
@@ -44,14 +44,14 @@ class TestVisibilityAndComparisonService(unittest.TestCase):
 
         self.assertEqual(len(series.samples), 721)
         self.assertFalse(series.computation.refraction)
-        self.assertLess(elapsed_s, 2.0, msg=f"Demasiado lento: {elapsed_s:.3f} s > 2.0 s")
+        self.assertLess(elapsed_s, 2.0, msg=f"Too slow: {elapsed_s:.3f} s > 2.0 s")
 
         event_types = {ev.event for ev in series.events}
         self.assertIn(EventType.SUNSET, event_types)
         self.assertIn(EventType.EARTHSET, event_types)
 
     def test_side_by_side_comparison_contrasts_polar_peaks_craters_and_farside(self) -> None:
-        """RF-02, RF-05: compara Shackleton, Malapert, Cabeus (PSR) y Chang'e 4 (cara oculta)."""
+        """RF-02, RF-05: compares Shackleton, Malapert, Cabeus (PSR), and Chang'e 4 (far side)."""
         sites = [
             LunarCoordinate(lat_deg=-89.68, lon_deg=-166.0, observer_height_m=1.5, site_id="shackleton-rim"),
             LunarCoordinate(lat_deg=-86.0, lon_deg=2.7, observer_height_m=3.5, site_id="malapert-massif"),
@@ -67,20 +67,20 @@ class TestVisibilityAndComparisonService(unittest.TestCase):
         self.assertEqual(len(res.metrics), 4)
         by_id = {m.site.site_id: m for m in res.metrics}
 
-        # Chang'e 4 en la cara oculta nunca ve la Tierra -> DTE = 0.0 y Sun+DTE = 0.0
+        # Chang'e 4 on the far side never sees Earth -> DTE = 0.0 and Sun+DTE = 0.0
         self.assertEqual(by_id["change-4"].dte_fraction, 0.0)
         self.assertEqual(by_id["change-4"].sun_and_dte_fraction, 0.0)
         self.assertTrue(by_id["change-4"].next_earthset.beyond_window)
 
-        # Malapert Massif mira hacia la Tierra -> mayor visibilidad DTE del polo sur (> 70 % en el ciclo draconico)
+        # Malapert Massif faces Earth -> highest south pole DTE visibility (> 70 % over the draconic cycle)
         self.assertGreater(by_id["malapert-massif"].dte_fraction, 0.70)
         self.assertGreater(by_id["malapert-massif"].dte_fraction, by_id["shackleton-rim"].dte_fraction)
         self.assertGreater(by_id["shackleton-rim"].dte_fraction, by_id["cabeus-crater"].dte_fraction)
 
-        # Cabeus Crater (fondo PSR rodeado de paredes altas) tiene mucha menos luz solar que Shackleton Rim
+        # Cabeus Crater (PSR floor surrounded by high walls) receives far less sunlight than Shackleton Rim
         self.assertLess(by_id["cabeus-crater"].sunlit_fraction, by_id["shackleton-rim"].sunlit_fraction)
 
-        # Verificacion de Telecomunicaciones DTE Avanzadas (MATH_MODELS §6)
+        # Advanced DTE Telecommunications verification (MATH_MODELS §6)
         malapert_dte = by_id["malapert-massif"].advanced_dte
         self.assertGreater(malapert_dte.earth_distance_km, 360000.0)
         self.assertLess(malapert_dte.earth_distance_km, 410000.0)
@@ -88,7 +88,7 @@ class TestVisibilityAndComparisonService(unittest.TestCase):
         self.assertGreaterEqual(malapert_dte.one_way_light_time_s, 1.20)
         self.assertLessEqual(malapert_dte.one_way_light_time_s, 1.40)
 
-        # Perdidas de propagacion FSPL ITU-R P.525-4
+        # FSPL propagation losses ITU-R P.525-4
         self.assertGreater(malapert_dte.fspl_s_band_db, 209.0)
         self.assertLess(malapert_dte.fspl_s_band_db, 213.0)
         self.assertGreater(malapert_dte.fspl_x_band_db, 221.0)
@@ -98,7 +98,7 @@ class TestVisibilityAndComparisonService(unittest.TestCase):
         self.assertLess(malapert_dte.fspl_s_band_db, malapert_dte.fspl_x_band_db)
         self.assertLess(malapert_dte.fspl_x_band_db, malapert_dte.fspl_ka_band_db)
 
-        # Chang'e 4 (cara oculta): holgura topografica negativa y blackout total
+        # Chang'e 4 (far side): negative terrain clearance and total blackout
         change4_dte = by_id["change-4"].advanced_dte
         self.assertLess(change4_dte.terrain_clearance_deg, 0.0)
         self.assertLess(change4_dte.max_clearance_deg, 0.0)
@@ -106,7 +106,7 @@ class TestVisibilityAndComparisonService(unittest.TestCase):
         self.assertGreater(change4_dte.longest_comms_blackout_hours, 600.0)
 
     def test_mast_height_improves_dte_terrain_clearance(self) -> None:
-        """Comprueba que elevar el mastil de 0.5 m a 10.0 m incrementa la holgura angular sobre el relieve."""
+        """Verifies that raising the mast from 0.5 m to 10.0 m increases angular clearance above terrain."""
         window = TimeWindow(
             start_utc=datetime(2027, 1, 1, 0, 0, tzinfo=UTC),
             end_utc=datetime(2027, 1, 3, 0, 0, tzinfo=UTC),
@@ -118,7 +118,7 @@ class TestVisibilityAndComparisonService(unittest.TestCase):
         res = compare_sites(ComparisonRequest(sites=[site_low, site_high], window=window))
         clearance_low = res.metrics[0].advanced_dte.terrain_clearance_deg
         clearance_high = res.metrics[1].advanced_dte.terrain_clearance_deg
-        self.assertGreater(clearance_high, clearance_low, msg="Elevar el mastil debe aumentar la holgura DTE")
+        self.assertGreater(clearance_high, clearance_low, msg="Raising the mast must increase DTE clearance")
 
 
 if __name__ == "__main__":

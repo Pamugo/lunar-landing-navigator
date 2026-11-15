@@ -1,8 +1,8 @@
-"""Punto de entrada FastAPI del Lunar Landing Site Navigator.
+"""FastAPI entry point for the Lunar Landing Site Navigator.
 
-Propietario: fullstack-visualizer.
-Expone /api/v1/health con el sello de verificacion cientifica contra NASA JPL Horizons y monta
-los routers de sitios, perfiles de hardware CSA/CLPS, horizonte, terreno 3D, visibilidad y comparacion.
+Owner: fullstack-visualizer.
+Exposes /api/v1/health with the scientific verification seal against NASA JPL Horizons and mounts
+the routers for sites, CSA/CLPS hardware profiles, horizon, 3D terrain, visibility, and comparison.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from app.services.ephemeris import compute_scientific_verification_seal
 app = FastAPI(
     title="Lunar Landing Site Navigator API",
     version=CONTRACT_VERSION,
-    description="Efemerides JPL (Skyfield) + horizonte topografico LOLA sin atmosfera.",
+    description="JPL ephemeris (Skyfield) + airless LOLA topographic horizon.",
 )
 
 app.add_middleware(
@@ -32,7 +32,7 @@ app.include_router(v1_router)
 
 @app.get("/api/v1/health", response_model=HealthResponse, tags=["system"])
 def health() -> HealthResponse:
-    """Comprobacion de vida del servicio, version del contrato y sello de verificacion cientifica."""
+    """Service health check, contract version, and scientific verification seal."""
     return HealthResponse(
         status="ok",
         contract_version=CONTRACT_VERSION,

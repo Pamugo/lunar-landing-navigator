@@ -6,65 +6,65 @@ description: >-
   provenance, submission deliverables, AI-use disclosure, and producing a dated audit report with evidence.
 ---
 
-# Space Apps Compliance — Auditoría frente a las bases del reto
+# Space Apps Compliance — Audit Against Challenge Rules
 
-Propietario: `lead-architect-auditor`. Disparador: `/audit-challenge`. Salida: `docs/audits/AUDIT_<YYYY-MM-DD>.md`.
+Owner: `lead-architect-auditor`. Trigger: `/audit-challenge`. Output: `docs/audits/AUDIT_<YYYY-MM-DD>.md`.
 
-## 1. Procedimiento
+## 1. Procedure
 
-1. Ejecutar `python scripts/verify_environment.py` y `python -m unittest discover -s backend/tests -t backend -v`; adjuntar resumen.
-2. Recorrer la matriz de `docs/CHALLENGE_SPEC.md §2` y, para cada ID, exigir **evidencia concreta** (archivo + línea, test, captura). Sin evidencia → no puede estar ✅.
-3. Completar los checklists §2–§5 de esta skill.
-4. Escribir el informe con: fecha, commit, tabla de estados, bloqueos, top-5 acciones priorizadas.
-5. Actualizar la columna *Estado* de `CHALLENGE_SPEC.md` solo con estados respaldados por evidencia.
+1. Run `python scripts/verify_environment.py` and `python -m unittest discover -s backend/tests -t backend -v`; attach summary.
+2. Walk through the `docs/CHALLENGE_SPEC.md §2` matrix and, for each ID, require **concrete evidence** (file + line, test, screenshot). Without evidence → cannot be marked ✅.
+3. Complete checklists §2–§5 of this skill.
+4. Write the report with: date, commit, status table, blockers, top-5 prioritized actions.
+5. Update the *Status* column of `CHALLENGE_SPEC.md` only with evidence-backed statuses.
 
-## 2. Requisitos del reto (contenido)
+## 2. Challenge Requirements (Content)
 
-- [ ] RF-01 Sitios curados (Apollo, CLPS, Artemis, internacionales/comerciales) + coordenadas personalizadas.
-- [ ] RF-02 Comparación lado a lado / secuencial con parámetros idénticos.
-- [ ] RF-03 Fechas/horas flexibles (días y estaciones lunares).
-- [ ] RF-04 Sol y Tierra vs horizonte local + tiempo restante hasta Sunset/Earthset.
-- [ ] RF-05 Elevación solar, duración de luz, ventanas DTE.
-- [ ] RF-06 Mapa 2D, superficie 3D, cúpula 360°, líneas de tiempo/animaciones.
-- [ ] RF-07 Modo técnico + modo educativo.
-- [ ] RT-01 Efemérides JPL (DE421/DE440) con libración; validado contra Horizons.
-- [ ] RT-02 Topografía real LOLA para el horizonte.
-- [ ] RT-03 Sin refracción; horizonte = topografía + curvatura (R = 1737.4 km). Buscar con grep `refract` en `backend/app/` → solo debe aparecer en comentarios que lo prohíben o en `refraction=False`.
-- [ ] RT-04 Contratos versionados, rendimiento, reproducibilidad.
+- [ ] RF-01 Curated sites (Apollo, CLPS, Artemis, international/commercial) + custom coordinates.
+- [ ] RF-02 Side-by-side / sequential comparison with identical parameters.
+- [ ] RF-03 Flexible dates/times (lunar days and seasons).
+- [ ] RF-04 Sun and Earth vs local horizon + time remaining until Sunset/Earthset.
+- [ ] RF-05 Solar elevation, sunlight duration, DTE windows.
+- [ ] RF-06 2D map, 3D surface, 360° dome, timelines/animations.
+- [ ] RF-07 Engineer mode + educational mode.
+- [ ] RT-01 JPL ephemerides (DE421/DE440) with libration; validated against Horizons.
+- [ ] RT-02 Real LOLA topography for horizon.
+- [ ] RT-03 Zero atmospheric refraction; horizon = topography + curvature (R = 1737.4 km). Grep `refract` in `backend/app/` → must only appear in comments forbidding it or `refraction=False`.
+- [ ] RT-04 Versioned contracts, performance, reproducibility.
 
-## 3. Datos y procedencia
+## 3. Data and Provenance
 
-- [ ] Cada dataset de NASA citado con nombre de producto, versión, URL y fecha de descarga (`CHALLENGE_SPEC.md §5`, pantalla "Créditos" de la UI).
-- [ ] Coordenadas de `curated_sites.json` con `source` y `verification_status`; ninguna `approximate_pending_lola` presentada como precisa en Modo Ingeniero.
-- [ ] Licencias de terceros compatibles (Skyfield MIT, Three.js MIT, ECharts Apache-2.0, React MIT).
-- [ ] Sin logotipos de NASA ni insinuación de respaldo oficial (verificar en las bases 2026).
+- [ ] Every NASA dataset cited with product name, version, URL, and download date (`CHALLENGE_SPEC.md §5`, UI credits).
+- [ ] `curated_sites.json` coordinates carry `source` and `verification_status`; none marked `approximate_pending_lola` presented as exact in Engineer Mode.
+- [ ] Compatible third-party licenses (Skyfield MIT, Three.js MIT, ECharts Apache-2.0, React MIT).
+- [ ] No NASA logos or implication of official endorsement (check against 2026 rules).
 
-## 4. Entregables de Space Apps (⚠️ confirmar contra las bases oficiales 2026 antes de la entrega)
+## 4. Space Apps Deliverables (⚠️ confirm against official 2026 rules before submission)
 
-- [ ] Página de proyecto: título, resumen, descripción detallada, desafío elegido.
-- [ ] Demo: vídeo corto o presentación (históricamente ~30 s de vídeo o ≤ 7 diapositivas — **verificar**).
-- [ ] Enlace al repositorio público con instrucciones de ejecución.
-- [ ] Lista de datos y recursos de NASA y de otras agencias utilizados.
-- [ ] Declaración de uso de herramientas de IA (qué, dónde, cómo) y etiquetado de contenido generado por IA si las bases lo requieren.
-- [ ] Equipo registrado y entrega antes del plazo del evento local/global.
+- [ ] Project page: title, summary, detailed description, selected challenge.
+- [ ] Demo: short video or pitch deck (historically ~30 s video or ≤ 7 slides — **verify**).
+- [ ] Link to public repository with run instructions.
+- [ ] List of NASA and partner-agency data and resources used.
+- [ ] AI tool usage disclosure (what, where, how) and labeling of AI-generated content if required by rules.
+- [ ] Team registered and submission filed before local/global event deadline.
 
-## 5. Criterios de evaluación (alinear el pitch; nombres a verificar en las bases 2026)
+## 5. Judging Criteria (align pitch; verify criterion names in 2026 rules)
 
-| Criterio | Evidencia a preparar |
-|----------|----------------------|
-| Impacto / influencia | Caso de uso: retraso de lanzamiento → nueva fecha en < 1 min |
-| Creatividad | Cúpula 360° con exageración vertical explícita; "ventanas doradas" Sol+DTE |
-| Validez | Tabla de validación vs JPL Horizons y oráculos analíticos (`VALIDATION_LOG.md`) |
-| Relevancia | Sitios Artemis III/CLPS reales; polo sur |
-| Presentación | Modo Educativo + demo guiada |
+| Criterion | Evidence to Prepare |
+|-----------|---------------------|
+| Impact | Use case: launch delay → new landing date in < 1 min |
+| Creativity | 360° dome with explicit vertical exaggeration; "Golden Windows" (Sun+DTE) |
+| Validity | Validation table vs JPL Horizons and analytical oracles (`VALIDATION_LOG.md`) |
+| Relevance | Real Artemis III / CLPS sites; south pole |
+| Presentation | Educational Mode + guided demo |
 
-## 6. Formato del informe
+## 6. Report Format
 
 ```markdown
-# Auditoría Space Apps — <fecha> — commit <hash>
-| ID | Estado | Evidencia | Acción |
-|----|--------|-----------|--------|
+# Space Apps Audit — <date> — commit <hash>
+| ID | Status | Evidence | Action |
+|----|--------|----------|--------|
 ...
-## Bloqueos
-## Top-5 acciones
+## Blockers
+## Top-5 Actions
 ```

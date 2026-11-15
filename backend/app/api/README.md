@@ -1,7 +1,7 @@
-# backend/app/api — Capa HTTP
+# backend/app/api — HTTP Layer
 
-**Propietario exclusivo:** `fullstack-visualizer`.
+**Exclusive owner:** `fullstack-visualizer`.
 
-Routers FastAPI versionados (`/api/v1`). Solo validan, invocan `app.services.*` y mapean al contrato de
-`app/models/schemas.py`. **No contienen física.** Rutas previstas: `sites`, `horizon`, `visibility`, `compare`
-(ver `docs/ARCHITECTURE.md` §5).
+Versioned FastAPI routers (`/api/v1`). Validate inputs, invoke `app.services.*`, and map to the
+`app/models/schemas.py` contract. **Contain no physics.** Planned routes: `sites`, `horizon`, `visibility`, `compare`
+(see `docs/ARCHITECTURE.md` §5).

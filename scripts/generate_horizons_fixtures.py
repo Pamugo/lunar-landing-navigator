@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Generador de fixtures de validacion cientifica desde NASA JPL Horizons API (RT-01).
+"""Scientific validation fixture generator from NASA JPL Horizons API (RT-01).
 
-Propietario: qa-verification-agent.
-Consulta JPL Horizons (https://ssd.jpl.nasa.gov/api/horizons.api) con:
-  - CENTER='coord@301' (superficie lunar, esfera IAU R = 1737.4 km)
-  - COMMAND='10' (Sol) y COMMAND='399' (Tierra)
-  - APPARENT='AIRLESS' (sin refraccion atmosferica, incluye tiempo-luz y aberracion)
-  - QUANTITIES='4,20' (Az/El aparentes en grados y distancia observador-cuerpo en UA)
+Owner: qa-verification-agent.
+Queries JPL Horizons (https://ssd.jpl.nasa.gov/api/horizons.api) with:
+  - CENTER='coord@301' (lunar surface, IAU sphere R = 1737.4 km)
+  - COMMAND='10' (Sun) and COMMAND='399' (Earth)
+  - APPARENT='AIRLESS' (zero atmospheric bending, includes light-time and aberration)
+  - QUANTITIES='4,20' (apparent Az/El in degrees and observer-body range in AU)
 
-Guarda las fixtures versionadas en backend/tests/fixtures/horizons/horizons_reference.json
-para que la suite de tests sea 100 % determinista y libre de red en ejecucion normal.
+Stores versioned fixtures in backend/tests/fixtures/horizons/horizons_reference.json
+so the test suite stays 100% deterministic and network-free during normal runs.
 
-Uso:
+Usage:
     python scripts/generate_horizons_fixtures.py
 """
 
@@ -102,15 +102,15 @@ def fetch_horizons_series(
 
     raw_text = payload.get("result", "")
     if "$$SOE" not in raw_text or "$$EOE" not in raw_text:
-        raise RuntimeError(f"Respuesta inesperada de JPL Horizons:\n{raw_text[:600]}")
+        raise RuntimeError(f"Unexpected response from JPL Horizons:\n{raw_text[:600]}")
 
     block = raw_text.split("$$SOE", 1)[1].split("$$EOE", 1)[0].strip()
     rows: list[dict[str, object]] = []
     for line in block.splitlines():
         [p.strip() for p in line.split(",") if p.strip() != ""]
-        # Formato CSV con QUANTITIES='4,20':
+        # CSV format with QUANTITIES='4,20':
         # [0]=Date__(UT)__HR:MN, [1]=solar/lunar presence, [2]=Azimuth_(a-app), [3]=Elevation_(a-app), [4]=delta(AU), [5]=deldot
-        # Nota: si hay columnas vacias entre comas, separamos sin filtrar vacios:
+        # Note: if there are empty columns between commas, split without filtering empty strings:
         raw_cols = [c.strip() for c in line.split(",")]
         if len(raw_cols) < 6:
             continue
@@ -143,7 +143,7 @@ def main() -> int:
             "bodies": {},
         }
         for body_name, code in Bodies:
-            print(f"[HORIZONS] Consultando {body_name} ({code}) para {site['site_id']} ...")
+            print(f"[HORIZONS] Querying {body_name} ({code}) for {site['site_id']} ...")
             samples = fetch_horizons_series(
                 body_code=code,
                 lat_deg=float(site["lat_deg"]),
@@ -164,7 +164,7 @@ def main() -> int:
         "sites": cases,
     }
     FIXTURE_PATH.write_text(json.dumps(fixture_doc, indent=2), encoding="utf-8")
-    print(f"[OK] Fixture escrita en {FIXTURE_PATH.relative_to(ROOT)} ({len(cases)} sitios)")
+    print(f"[OK] Fixture written to {FIXTURE_PATH.relative_to(ROOT)} ({len(cases)} sites)")
     return 0
 
 

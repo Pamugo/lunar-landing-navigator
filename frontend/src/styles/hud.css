@@ -1,6 +1,6 @@
 /**
- * Sistema de Diseno "NASA Mission Control Minimal"
- * Referencia obligatoria: docs/UI_DESIGN.md y skills/mission-comparison-ux/SKILL.md
+ * "NASA Mission Control Minimal" Design System
+ * Mandatory references: docs/UI_DESIGN.md and skills/mission-comparison-ux/SKILL.md
  */
 
 :root {
@@ -25,6 +25,17 @@
   --dte-cyan-bright: #38BDF8;
   --golden-emerald: #10B981;
   --occulted-slate: #64748B;
+
+  --accent-amber-text: #FDE047;
+  --accent-amber-bright-text: #FEF08A;
+  --accent-blue-text: #93C5FD;
+  --accent-cyan-text: #38BDF8;
+  --accent-emerald-text: #34D399;
+  --accent-danger-text: #F87171;
+  --surface-subtle: rgba(15, 23, 42, 0.55);
+  --surface-subtle-border: 1px solid rgba(255, 255, 255, 0.08);
+  --compass-north-text: #F87171;
+  --compass-cardinal-text: #94A3B8;
 
   --font-sans: "Inter", "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -83,6 +94,8 @@ body {
 }
 
 .header-hud {
+  position: relative;
+  z-index: 200;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -92,7 +105,7 @@ body {
 .header-hud-top {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   width: 100%;
@@ -138,8 +151,7 @@ body {
 }
 
 .datetime-picker-input {
-  padding-right: 44px;
-  min-width: 195px;
+  min-width: 175px;
   color-scheme: dark;
   font-size: 12px;
   background: rgba(15, 23, 42, 0.85);
@@ -227,36 +239,50 @@ body {
 .brand-cluster {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
-.nasa-insignia {
+.nasa-insignia-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--nasa-blue) 0%, var(--nasa-blue-accent) 100%);
-  color: var(--text-primary);
-  font-weight: 800;
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  text-transform: uppercase;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  flex-shrink: 0;
+}
+
+.nasa-insignia-logo {
+  display: block;
+  height: 88px;
+  width: auto;
+  object-fit: contain;
+}
+
+.brand-text-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
 }
 
 .brand-title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: 0.012em;
   color: var(--text-primary);
 }
 
 .brand-subtitle {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--text-muted);
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--text-secondary);
 }
 
 .header-controls {
@@ -305,7 +331,7 @@ body {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 60;
+  z-index: 300;
   width: 360px;
   max-width: 92vw;
   padding: 14px;
@@ -383,29 +409,77 @@ body {
 /* Mode Toggle */
 .mode-toggle {
   display: inline-flex;
-  background: rgba(11, 15, 25, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius-sm);
-  padding: 3px;
-  gap: 3px;
+  background: rgba(11, 15, 25, 0.92);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: var(--radius-md);
+  padding: 5px;
+  gap: 5px;
 }
 
 .mode-btn {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 7px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
+.mode-btn:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .mode-btn.active {
-  background: var(--nasa-blue);
+  background: linear-gradient(135deg, var(--nasa-blue) 0%, var(--nasa-blue-accent) 100%);
   color: var(--text-primary);
-  box-shadow: 0 2px 10px rgba(11, 61, 145, 0.55);
+  box-shadow: 0 4px 16px rgba(30, 98, 208, 0.55);
+}
+
+/* Language Toggle (ES | EN) */
+.lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(17, 24, 39, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  gap: 4px;
+}
+
+.lang-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 13px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lang-btn:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lang-btn:focus-visible {
+  outline: 2px solid var(--nasa-blue-accent);
+  outline-offset: 1px;
+}
+
+.lang-btn.active {
+  background: linear-gradient(135deg, var(--nasa-blue) 0%, var(--nasa-blue-accent) 100%);
+  color: var(--text-primary);
+  box-shadow: 0 3px 12px rgba(30, 98, 208, 0.45);
 }
 
 /* ---------------- Mobile Navigation Tabs ---------------- */
@@ -434,19 +508,51 @@ body {
   border-color: var(--nasa-blue-accent);
 }
 
-/* ---------------- Desktop Docked Grid ---------------- */
+/* ---------------- Desktop Docked Grid & Resizable Panes ---------------- */
 .mission-workspace {
   display: grid;
-  grid-template-columns: minmax(390px, 43%) 1fr;
-  gap: 12px;
+  grid-template-columns: calc(var(--visual-pane-width, 43%) - 6px) 12px minmax(0, 1fr);
+  gap: 0;
   align-items: stretch;
 }
 
 .visual-core-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   padding: 14px;
   gap: 12px;
+  min-width: 0;
+}
+
+.visual-core-panel.is-custom-sized {
+  align-self: start;
+}
+
+.visual-core-panel.is-custom-sized .viewport-stage {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 220px;
+}
+
+.comparator-pane {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.comparator-pane .comparison-panel {
+  flex: 1 1 auto;
+}
+
+.comparator-pane.is-custom-sized {
+  align-self: start;
+}
+
+.comparator-pane.is-custom-sized .comparison-panel {
+  height: 100%;
+  overflow-y: auto;
 }
 
 .comparison-panel {
@@ -454,6 +560,91 @@ body {
   flex-direction: column;
   padding: 14px;
   gap: 12px;
+  min-width: 0;
+}
+
+/* Interactive Drag Handles */
+.workspace-splitter-x {
+  position: relative;
+  align-self: stretch;
+  width: 12px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+}
+
+.workspace-splitter-x::before {
+  content: "";
+  width: 3px;
+  height: 54px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.35);
+  transition: background-color 0.15s ease, height 0.15s ease, box-shadow 0.15s ease;
+}
+
+.workspace-splitter-x:hover::before,
+.workspace-splitter-x:active::before {
+  background: #38BDF8;
+  height: 96px;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.55);
+}
+
+.panel-resize-handle-y {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -4px;
+  height: 10px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  z-index: 15;
+}
+
+.panel-resize-handle-y::before {
+  content: "";
+  width: 56px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.32);
+  transition: background-color 0.15s ease, width 0.15s ease, box-shadow 0.15s ease;
+}
+
+.panel-resize-handle-y:hover::before,
+.panel-resize-handle-y:active::before {
+  background: #38BDF8;
+  width: 100px;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.55);
+}
+
+.panel-resize-handle-corner {
+  position: absolute;
+  bottom: -2px;
+  width: 16px;
+  height: 16px;
+  touch-action: none;
+  user-select: none;
+  z-index: 18;
+}
+
+.panel-resize-handle-corner.corner-br {
+  right: -2px;
+  cursor: nwse-resize;
+  background: radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.55) 0%, rgba(56, 189, 248, 0) 68%);
+  border-bottom-right-radius: var(--radius-md);
+}
+
+.panel-resize-handle-corner.corner-bl {
+  left: -2px;
+  cursor: nesw-resize;
+  background: radial-gradient(circle at bottom left, rgba(56, 189, 248, 0.55) 0%, rgba(56, 189, 248, 0) 68%);
+  border-bottom-left-radius: var(--radius-md);
 }
 
 .panel-header {
@@ -462,15 +653,19 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(24, 33, 52, 0.55);
+  border: 1px solid rgba(56, 189, 248, 0.08);
 }
 
 .panel-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 1.15rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: #ffffff;
 }
 
 .subview-tabs {
@@ -576,6 +771,12 @@ body {
   border-color: var(--nasa-blue-accent);
 }
 
+.close-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 /* Educational Story Card & Mission Callout */
 .mission-story-card {
   background: rgba(11, 61, 145, 0.16);
@@ -638,6 +839,9 @@ body {
 }
 
 .site-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   border: var(--border-subtle);
   background: var(--bg-panel-elevated);
   color: var(--text-secondary);
@@ -649,10 +853,16 @@ body {
   transition: all 0.15s ease;
 }
 
+.site-chip-icon {
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.9;
+}
+
 .site-chip.selected {
-  background: rgba(11, 61, 145, 0.45);
-  border-color: var(--nasa-blue-accent);
-  color: var(--text-primary);
+  background: #0b3d91;
+  border-color: #1e62d0;
+  color: #ffffff;
 }
 
 .site-chip.focused {
@@ -698,8 +908,7 @@ body {
 
 .category-tag {
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   padding: 2px 6px;
   border-radius: 4px;
   background: rgba(11, 61, 145, 0.45);
@@ -849,6 +1058,12 @@ body {
 
   .mission-workspace {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .workspace-splitter-x,
+  .panel-resize-handle-corner {
+    display: none;
   }
 
   .hide-on-mobile {
@@ -1089,6 +1304,17 @@ body {
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.18);
 }
 
+.solar-optimal-badge.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.solar-optimal-badge.clickable:hover {
+  transform: translateY(-1px);
+  border-color: rgba(253, 224, 71, 0.85);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.35);
+}
+
 .solar-architectures-list {
   display: flex;
   flex-direction: column;
@@ -1135,7 +1361,7 @@ body {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
-  color: #F8FAFC;
+  color: var(--text-primary);
 }
 
 .solar-efficiency-tag {
@@ -1214,6 +1440,78 @@ body {
   padding: 0 4px;
 }
 
+/* Engineer Mode Photovoltaic Array Net Output Bar & Badges */
+.pv-array-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.pv-control-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pv-control-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-amber-text);
+}
+
+.pv-number-input {
+  width: 74px;
+  padding: 4px 7px;
+  font-size: 12px;
+}
+
+.pv-unit-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.pv-preset-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.pv-net-output-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.pv-net-output-row strong {
+  color: var(--accent-amber-text);
+}
+
+.pv-net-output-row.highlight {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.48);
+}
+
+.pv-net-output-row.highlight strong {
+  color: var(--accent-amber-bright-text);
+  font-size: 11px;
+}
+
 .solar-compass-pills {
   display: flex;
   flex-wrap: wrap;
@@ -1232,6 +1530,37 @@ body {
   padding: 2px 5px;
   font-size: 9.5px;
   color: var(--text-secondary);
+}
+
+.solar-compass-pill.danger {
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #FCA5A5;
+}
+
+.solar-compass-pill.clickable {
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+.solar-compass-pill.clickable:hover {
+  background: rgba(51, 65, 85, 0.85);
+  transform: translateY(-1px);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
+}
+
+.solar-compass-pill.clickable.active {
+  background: rgba(245, 158, 11, 0.2);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.25);
+}
+
+.solar-compass-marker-btn {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.solar-compass-marker-btn:hover circle {
+  stroke-width: 2.2;
 }
 
 /* ---------------- Mast Height Selector & Topographic Shadow (RF-05, RT-02) ---------------- */
@@ -1461,6 +1790,836 @@ body {
   border-color: #38BDF8;
   color: #FFFFFF;
   box-shadow: 0 0 8px rgba(14, 165, 233, 0.35);
+}
+
+/* ---------------- Engineer Mode Operational Timeline Planner ---------------- */
+.timeline-eng-subtitle {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #93C5FD;
+  background: rgba(30, 58, 138, 0.22);
+  border-left: 3px solid var(--nasa-blue-accent);
+  padding: 4px 8px;
+  border-radius: 3px;
+}
+
+.timeline-eng-legend-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(11, 15, 25, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.timeline-eng-traces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.timeline-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, 0.85);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.timeline-legend-chip:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(30, 41, 59, 0.92);
+}
+
+.timeline-legend-chip.muted {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.timeline-legend-chip.active.sun {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.timeline-legend-chip.active.earth {
+  border-color: rgba(6, 182, 212, 0.55);
+}
+
+.timeline-legend-chip.active.horizon {
+  border-color: rgba(226, 232, 240, 0.45);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  flex-shrink: 0;
+}
+
+.legend-swatch.line.sun {
+  border-top: 2.5px solid #F59E0B;
+}
+
+.legend-swatch.line.earth {
+  border-top: 2.5px solid #06B6D4;
+}
+
+.legend-swatch.dashed.horizon {
+  border-top: 2px dashed #E2E8F0;
+}
+
+.timeline-band-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.timeline-band-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+}
+
+.timeline-band-pill.golden {
+  color: #34D399;
+}
+
+.timeline-band-pill.solar-only {
+  color: #FBBF24;
+}
+
+.timeline-band-pill.eclipse {
+  color: #F87171;
+}
+
+.band-box {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.band-box.golden {
+  background: rgba(16, 185, 129, 0.35);
+  border: 1px solid rgba(16, 185, 129, 0.7);
+}
+
+.band-box.solar-only {
+  background: rgba(245, 158, 11, 0.32);
+  border: 1px solid rgba(245, 158, 11, 0.7);
+}
+
+.band-box.eclipse {
+  background: rgba(239, 68, 68, 0.34);
+  border: 1px solid rgba(239, 68, 68, 0.7);
+}
+
+.timeline-telemetry-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(59, 130, 246, 0.32);
+  font-size: 11px;
+}
+
+.telemetry-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+}
+
+.telemetry-source-tag {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.2);
+  color: #93C5FD;
+  font-weight: 700;
+}
+
+.telemetry-utc {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
+  color: #F8FAFC;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.timeline-scrubber-time {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #F8FAFC;
+}
+
+.timeline-state-badge {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.timeline-state-badge.golden {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.55);
+  color: #34D399;
+}
+
+.timeline-state-badge.solar_only {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  color: #FBBF24;
+}
+
+.timeline-state-badge.eclipse {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  color: #F87171;
+}
+
+.timeline-site-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  background: rgba(11, 15, 25, 0.72);
+  border: 1px solid rgba(56, 189, 248, 0.26);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+}
+
+.timeline-site-selector-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #93C5FD;
+}
+
+.timeline-site-pill.active {
+  background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+  color: #FFFFFF;
+  border-color: #34D399;
+  font-weight: 700;
+}
+
+/* ---------------- Header Subcontrols & Theme Toggle ---------------- */
+.header-subcontrols {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  color: var(--text-secondary);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.theme-toggle-btn:hover,
+.theme-toggle-btn:focus-visible {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(147, 197, 253, 0.65);
+  color: #FFFFFF;
+  outline: none;
+}
+
+.theme-toggle-btn.light {
+  background: rgba(255, 251, 235, 0.95);
+  color: #92400E;
+  border-color: rgba(245, 158, 11, 0.55);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.18);
+}
+
+.theme-toggle-btn.light:hover,
+.theme-toggle-btn.light:focus-visible {
+  background: #FEF3C7;
+  border-color: #D97706;
+  color: #78350F;
+}
+
+.pv-toggle-btn {
+  padding: 4px 10px;
+  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--solar-amber-bright);
+  font-weight: 600;
+}
+
+.pv-toggle-btn.active {
+  border-color: var(--solar-amber-bright);
+  color: #FEF08A;
+  background: rgba(245, 158, 11, 0.22);
+}
+
+.card-remove-btn {
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.card-view-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  border: var(--surface-subtle-border);
+}
+
+.card-view-bar.focused {
+  background: rgba(30, 98, 208, 0.18);
+  border: 1px solid rgba(30, 98, 208, 0.55);
+}
+
+.card-view-bar.terrain-active {
+  background: rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(16, 185, 129, 0.55);
+}
+
+.terrain-focus-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(30, 98, 208, 0.22);
+  color: #E2E8F0;
+  border-color: rgba(59, 130, 246, 0.45);
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+.comparator-window-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(30, 98, 208, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  color: var(--accent-blue-text);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---------------- Light Theme Overrides ---------------- */
+:root[data-theme="light"] {
+  --bg-space-deep: #F1F5F9;
+  --bg-panel-glass: rgba(255, 255, 255, 0.92);
+  --bg-panel-elevated: #F8FAFC;
+  --bg-panel-hover: #E2E8F0;
+  --border-subtle: 1px solid rgba(15, 23, 42, 0.12);
+  --border-active: 1px solid rgba(30, 98, 208, 0.72);
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --solar-amber: #B45309;
+  --solar-amber-bright: #92400E;
+  --dte-cyan: #0284C7;
+  --dte-cyan-bright: #0369A1;
+  --accent-amber-text: #92400E;
+  --accent-amber-bright-text: #B45309;
+  --accent-blue-text: #0B3D91;
+  --accent-cyan-text: #0369A1;
+  --accent-emerald-text: #047857;
+  --accent-danger-text: #B91C1C;
+  --surface-subtle: #F8FAFC;
+  --surface-subtle-border: 1px solid #CBD5E1;
+  --compass-north-text: #DC2626;
+  --compass-cardinal-text: #334155;
+}
+
+:root[data-theme="light"] body {
+  background-color: var(--bg-space-deep);
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(11, 61, 145, 0.08), transparent 45%),
+    radial-gradient(circle at 82% 85%, rgba(6, 182, 212, 0.07), transparent 48%);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .glass-panel {
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+:root[data-theme="light"] .mission-control-toolbar {
+  border-top-color: rgba(15, 23, 42, 0.1);
+}
+
+:root[data-theme="light"] .panel-header {
+  background: rgba(241, 245, 249, 0.96);
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+:root[data-theme="light"] .panel-title {
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .mode-toggle,
+:root[data-theme="light"] .lang-toggle,
+:root[data-theme="light"] .subview-tabs {
+  background: #E2E8F0;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+:root[data-theme="light"] .mode-btn:hover,
+:root[data-theme="light"] .lang-btn:hover,
+:root[data-theme="light"] .subview-btn:hover {
+  color: #0F172A;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+:root[data-theme="light"] .mode-btn.active,
+:root[data-theme="light"] .lang-btn.active,
+:root[data-theme="light"] .subview-btn.active {
+  color: #FFFFFF;
+}
+
+:root[data-theme="light"] .hud-input,
+:root[data-theme="light"] .hud-select,
+:root[data-theme="light"] .datetime-picker-input,
+:root[data-theme="light"] .mast-number-input,
+:root[data-theme="light"] .pv-number-input {
+  background: #FFFFFF;
+  color: #0F172A;
+  border-color: rgba(15, 23, 42, 0.2);
+  color-scheme: light;
+}
+
+:root[data-theme="light"] .preset-btn {
+  background: #F1F5F9;
+  color: #1E293B;
+  border-color: #CBD5E1;
+}
+
+:root[data-theme="light"] .preset-btn:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+  border-color: #94A3B8;
+}
+
+:root[data-theme="light"] .preset-btn.active {
+  background: #FEF3C7;
+  color: #92400E;
+  border-color: #F59E0B;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .utc-badge,
+:root[data-theme="light"] .hw-selector-group,
+:root[data-theme="light"] .hud-btn-mini,
+:root[data-theme="light"] .mast-height-btn,
+:root[data-theme="light"] .mast-chip-btn {
+  background: #FFFFFF;
+  color: #334155;
+  border-color: rgba(15, 23, 42, 0.16);
+}
+
+:root[data-theme="light"] .mast-height-btn:hover,
+:root[data-theme="light"] .mast-chip-btn:hover {
+  background: #F1F5F9;
+  color: #0F172A;
+  border-color: #94A3B8;
+}
+
+:root[data-theme="light"] .mast-height-btn.active,
+:root[data-theme="light"] .mast-chip-btn.active {
+  background: #DBEAFE;
+  color: #0B3D91;
+  border-color: #3B82F6;
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .hud-btn-mini:hover,
+:root[data-theme="light"] .hud-btn-mini.active {
+  background: var(--nasa-blue-accent);
+  color: #FFFFFF;
+  border-color: var(--nasa-blue-accent);
+}
+
+:root[data-theme="light"] .hud-btn-mini.pv-toggle-btn {
+  background: #FEF3C7;
+  color: #92400E;
+  border-color: #F59E0B;
+}
+
+:root[data-theme="light"] .hud-btn-mini.pv-toggle-btn:hover,
+:root[data-theme="light"] .hud-btn-mini.pv-toggle-btn.active {
+  background: #FDE68A;
+  color: #92400E;
+  border-color: #D97706;
+}
+
+:root[data-theme="light"] .card-remove-btn {
+  background: #FFFFFF;
+  color: #334155;
+  border-color: #CBD5E1;
+}
+
+:root[data-theme="light"] .card-remove-btn:hover {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border-color: #FCA5A5;
+}
+
+:root[data-theme="light"] .viewport-stage {
+  --text-primary: #FFFFFF;
+  --text-secondary: #E2E8F0;
+  --text-muted: #CBD5E1;
+  --solar-amber: #F59E0B;
+  --solar-amber-bright: #FBBF24;
+  --dte-cyan: #06B6D4;
+  --dte-cyan-bright: #38BDF8;
+}
+
+:root[data-theme="light"] .viewport-stage .hud-pill {
+  background: rgba(11, 15, 25, 0.9);
+  color: #F8FAFC;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+:root[data-theme="light"] .viewport-stage .hud-btn-mini {
+  background: rgba(15, 23, 42, 0.84);
+  color: #E2E8F0;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+:root[data-theme="light"] .viewport-stage .hud-btn-mini:hover,
+:root[data-theme="light"] .viewport-stage .hud-btn-mini.active {
+  background: var(--nasa-blue-accent);
+  color: #FFFFFF;
+  border-color: var(--nasa-blue-accent);
+}
+
+:root[data-theme="light"] .site-chip {
+  background: #FFFFFF;
+  color: #334155;
+  border-color: #CBD5E1;
+}
+
+:root[data-theme="light"] .site-chip.selected {
+  background: #0B3D91;
+  border-color: #1E62D0;
+  color: #FFFFFF;
+}
+
+:root[data-theme="light"] .site-card {
+  background: #FFFFFF;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+:root[data-theme="light"] .site-card.focused {
+  background: #F8FAFC;
+  border: 1px solid rgba(30, 98, 208, 0.72);
+  box-shadow: 0 4px 16px rgba(11, 61, 145, 0.1);
+}
+
+:root[data-theme="light"] .card-view-bar.focused {
+  background: #EFF6FF;
+  border-color: #93C5FD;
+}
+
+:root[data-theme="light"] .card-view-bar.terrain-active {
+  background: #ECFDF5;
+  border-color: #6EE7B7;
+}
+
+:root[data-theme="light"] .terrain-focus-btn,
+:root[data-theme="light"] .portal-link,
+:root[data-theme="light"] .hud-btn-export {
+  background: #EFF6FF;
+  color: #0B3D91;
+  border-color: #BFDBFE;
+  font-weight: 600;
+}
+
+:root[data-theme="light"] .terrain-focus-btn:hover,
+:root[data-theme="light"] .portal-link:hover,
+:root[data-theme="light"] .hud-btn-export:hover {
+  background: #DBEAFE;
+  color: #0B3D91;
+  border-color: #93C5FD;
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .category-tag {
+  background: rgba(11, 61, 145, 0.1);
+  color: #0B3D91;
+  border-color: rgba(11, 61, 145, 0.28);
+}
+
+:root[data-theme="light"] .body-status-box,
+:root[data-theme="light"] .countdown-box,
+:root[data-theme="light"] .advanced-dte-section,
+:root[data-theme="light"] .dte-telemetry-cell,
+:root[data-theme="light"] .dte-grid-cell,
+:root[data-theme="light"] .dte-fspl-row,
+:root[data-theme="light"] .dte-fspl-chip,
+:root[data-theme="light"] .solar-arch-row,
+:root[data-theme="light"] .solar-slider-container,
+:root[data-theme="light"] .solar-compass-pill,
+:root[data-theme="light"] .mast-height-selector-row,
+:root[data-theme="light"] .viability-banner,
+:root[data-theme="light"] .time-scrubber-bar,
+:root[data-theme="light"] .timeline-eng-subtitle,
+:root[data-theme="light"] .timeline-eng-legend-bar,
+:root[data-theme="light"] .timeline-telemetry-bar,
+:root[data-theme="light"] .timeline-site-selector,
+:root[data-theme="light"] .seal-kv {
+  background: #F8FAFC;
+  border-color: rgba(15, 23, 42, 0.12);
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .dte-cell-val {
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .dte-grid-value {
+  color: #0369A1;
+}
+
+:root[data-theme="light"] .dte-fspl-chip strong {
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .dte-fspl-chip.highlight-x {
+  background: #E0F2FE;
+  border-color: #7DD3FC;
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .dte-fspl-chip.highlight-x strong {
+  color: #0369A1;
+}
+
+:root[data-theme="light"] .dte-fspl-chip.highlight-ka {
+  background: #F3E8FF;
+  border-color: #D8B4FE;
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .dte-fspl-chip.highlight-ka strong {
+  color: #6B21A8;
+}
+
+:root[data-theme="light"] .clearance-badge.clear {
+  background: #D1FAE5;
+  border-color: #6EE7B7;
+  color: #047857;
+}
+
+:root[data-theme="light"] .clearance-badge.blocked {
+  background: #FEE2E2;
+  border-color: #FCA5A5;
+  color: #B91C1C;
+}
+
+:root[data-theme="light"] .dte-relay-alert {
+  background: #FEF2F2;
+  border-color: #FCA5A5;
+}
+
+:root[data-theme="light"] .solar-energy-section {
+  background: #F8FAFC;
+  border-color: #FDE68A;
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .solar-optimal-badge {
+  background: #FEF3C7;
+  color: #92400E;
+  border-color: #F59E0B;
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .solar-efficiency-tag.gold {
+  background: #FEF3C7;
+  color: #92400E;
+  border-color: #F59E0B;
+}
+
+:root[data-theme="light"] .solar-efficiency-tag.cyan {
+  background: #E0F2FE;
+  color: #0369A1;
+  border-color: #7DD3FC;
+}
+
+:root[data-theme="light"] .solar-efficiency-tag.slate {
+  background: #F1F5F9;
+  color: #475569;
+  border-color: #CBD5E1;
+}
+
+:root[data-theme="light"] .pv-array-bar,
+:root[data-theme="light"] .pv-net-output-row,
+:root[data-theme="light"] .pv-net-output-row.highlight {
+  background: #FFFBEB;
+  border-color: #FDE68A;
+  color: #334155;
+}
+
+:root[data-theme="light"] .pv-net-output-row strong,
+:root[data-theme="light"] .pv-net-output-row.highlight strong {
+  color: #B45309;
+  font-weight: 700;
+}
+
+:root[data-theme="light"] .solar-compass-box {
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+}
+
+:root[data-theme="light"] .solar-compass-pill.clickable:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .solar-compass-pill.clickable.active {
+  background: #FEF3C7;
+  border-color: #F59E0B;
+  color: #92400E;
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .solar-compass-pill.danger {
+  background: #FEE2E2;
+  border-color: #FCA5A5;
+  color: #B91C1C;
+}
+
+:root[data-theme="light"] .solar-total-shadow-banner {
+  background: #FEF2F2;
+  border-color: #FCA5A5;
+}
+
+:root[data-theme="light"] .viability-banner.winner {
+  background: #FEF3C7;
+  border-color: #F59E0B;
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .viability-banner.winner .viability-badge {
+  color: #92400E;
+}
+
+:root[data-theme="light"] .viability-score-num {
+  background: rgba(15, 23, 42, 0.08);
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .viability-banner.winner .viability-score-num {
+  background: #FDE68A;
+  color: #92400E;
+}
+
+:root[data-theme="light"] .telemetry-source-tag {
+  background: #DBEAFE;
+  color: #0B3D91;
+}
+
+:root[data-theme="light"] .telemetry-utc,
+:root[data-theme="light"] .timeline-scrubber-time {
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .timeline-state-badge.golden {
+  background: #D1FAE5;
+  border-color: #6EE7B7;
+  color: #047857;
+}
+
+:root[data-theme="light"] .timeline-state-badge.solar_only {
+  background: #FEF3C7;
+  border-color: #FCD34D;
+  color: #92400E;
+}
+
+:root[data-theme="light"] .timeline-state-badge.eclipse {
+  background: #FEE2E2;
+  border-color: #FCA5A5;
+  color: #B91C1C;
+}
+
+:root[data-theme="light"] .kpi-track {
+  background: #E2E8F0;
+}
+
+:root[data-theme="light"] .seal-popover {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+}
+
+:root[data-theme="light"] .seal-badge-btn {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+:root[data-theme="light"] .timeline-legend-chip,
+:root[data-theme="light"] .timeline-band-pill {
+  background: #FFFFFF;
+  color: #334155;
+  border-color: rgba(15, 23, 42, 0.14);
+}
+
+:root[data-theme="light"] .timeline-site-selector-label {
+  color: #0B3D91;
+}
+
+:root[data-theme="light"] .comparator-window-pill {
+  background: #EFF6FF;
+  border-color: #BFDBFE;
+  color: #0B3D91;
+}
+
+:root[data-theme="light"] .timeline-chart-surface {
+  background: #0F172A;
+  border-radius: var(--radius-md);
+  padding: 6px 8px;
+}
+
+:root[data-theme="light"] .mission-story-card {
+  background: rgba(11, 61, 145, 0.06);
+  border-color: rgba(30, 98, 208, 0.24);
 }
 
 

@@ -1,7 +1,7 @@
 /**
- * Cliente HTTP tipado para /api/v1 del Lunar Landing Site Navigator.
- * Propietario: fullstack-visualizer.
- * Regla: Cero calculos astronomicos en el cliente; toda la fisica proviene del backend.
+ * Typed HTTP client for /api/v1 of the Lunar Landing Site Navigator.
+ * Owner: fullstack-visualizer.
+ * Rule: Zero astronomical calculations on the client; all physics comes from the backend.
  */
 import type {
   AdvancedDteMetrics,
@@ -45,8 +45,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Genera enlaces profundos (deep-links) oficiales a NASA LROC QuickMap (nuevo dominio en Intuitive Machines)
- * y NASA Moon Trek para coordenadas personalizadas.
+ * Generates official deep links to NASA LROC QuickMap (Intuitive Machines domain)
+ * and NASA Moon Trek for custom coordinates.
  */
 export function buildExternalPortalLinks(lat_deg: number, lon_deg: number): {
   quickmap_url: string;

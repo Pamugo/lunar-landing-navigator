@@ -1,3 +1,5 @@
+import { useLanguage } from "../i18n/LanguageContext";
+import { getShortSiteName } from "../i18n/translations";
 import type { CuratedSite, LunarCoordinate } from "../types/contracts";
 import type { AppMode } from "./HeaderHUD";
 
@@ -32,13 +34,13 @@ export function PolarMap2D({
   onSelectCuratedSite,
   onSelectCustomCoordinate,
 }: PolarMap2DProps) {
+  const { lang, t } = useLanguage();
   const size = 360;
   const cx = size / 2;
   const cy = size / 2;
   const radiusPx = 142;
 
   const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (mode === "edu") return;
     const rect = e.currentTarget.getBoundingClientRect();
     const sx = ((e.clientX - rect.left) / rect.width) * size;
     const sy = ((e.clientY - rect.top) / rect.height) * size;
@@ -58,19 +60,19 @@ export function PolarMap2D({
   const polarSites = sites.filter((s) => s.lat_deg <= -80.0);
 
   return (
-    <div className="viewport-stage" aria-label="Mapa 2D estereografico del Polo Sur Lunar">
+    <div className="viewport-stage" aria-label={t.polarMap.stageAria}>
       <div className="viewport-overlay-top">
         <span className="hud-pill mono-telemetry">
-          Proyección Estereográfica Polar Sur (80°S–90°S · MOON_ME)
+          {t.polarMap.projectionLabel}
         </span>
       </div>
 
       <svg
         viewBox={`0 0 ${size} ${size}`}
-        style={{ width: "100%", height: "100%", cursor: mode === "edu" ? "default" : "crosshair" }}
+        style={{ width: "100%", height: "100%", cursor: "crosshair" }}
         onClick={handleSvgClick}
       >
-        {/* Anillos de latitud 82°S, 85°S, 88°S, 90°S */}
+        {/* Latitude rings 82°S, 85°S, 88°S, 90°S */}
         {[-80, -82, -85, -88].map((lat) => {
           const { y } = latLonToSvgXY(lat, 0, cx, cy, radiusPx);
           const r = Math.abs(cy - y);
@@ -97,17 +99,17 @@ export function PolarMap2D({
           );
         })}
 
-        {/* Ejes meridianos (0° Cara Visible hacia arriba, 90°E, 180° Cara Oculta, 90°W) */}
+        {/* Meridian axes (0° Near Side upward, 90°E, 180° Far Side, 90°W) */}
         <line x1={cx} y1={cy - radiusPx} x2={cx} y2={cy + radiusPx} stroke="rgba(148,163,184,0.2)" />
         <line x1={cx - radiusPx} y1={cy} x2={cx + radiusPx} y2={cy} stroke="rgba(148,163,184,0.2)" />
         <text x={cx} y={cy - radiusPx - 6} textAnchor="middle" fill="#38BDF8" fontSize="10" fontFamily="var(--font-mono)">
-          0° (Hacia la Tierra)
+          {t.polarMap.towardEarth}
         </text>
         <text x={cx} y={cy + radiusPx + 14} textAnchor="middle" fill="#94A3B8" fontSize="10" fontFamily="var(--font-mono)">
-          180° (Cara Oculta)
+          {t.polarMap.farSide}
         </text>
 
-        {/* Sitios polares */}
+        {/* Polar sites */}
         {polarSites.map((s) => {
           const { x, y } = latLonToSvgXY(s.lat_deg, s.lon_deg, cx, cy, radiusPx);
           const isFocused = focusedSite.site_id === s.id;
@@ -136,7 +138,7 @@ export function PolarMap2D({
                 fontSize="10"
                 fontWeight={isFocused ? "bold" : "normal"}
               >
-                {s.name.split("(")[0]?.trim()}
+                {getShortSiteName(s, lang)}
               </text>
             </g>
           );
@@ -145,9 +147,7 @@ export function PolarMap2D({
 
       <div className="viewport-overlay-bottom">
         <span className="hud-pill">
-          {mode === "edu"
-            ? "Haz clic en los marcadores para explorar los sitios polares históricos y de interés"
-            : "Haz clic en cualquier punto del mapa polar para evaluar coordenadas personalizadas"}
+          {mode === "edu" ? t.polarMap.eduHint : t.polarMap.engHint}
         </span>
       </div>
     </div>

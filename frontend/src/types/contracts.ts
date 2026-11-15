@@ -1,9 +1,9 @@
 /**
- * Espejo TypeScript del contrato definido en backend/app/models/schemas.py (fuente de verdad).
- * Propietario: fullstack-visualizer. Cualquier divergencia de nombres la detecta scripts/verify_environment.py.
- * En Sprint 2 se complementara con src/types/openapi.gen.ts (npm run gen:api).
+ * TypeScript mirror of the contract defined in backend/app/models/schemas.py (source of truth).
+ * Owner: fullstack-visualizer. Any naming divergence is detected by scripts/verify_environment.py.
+ * Can be complemented with src/types/openapi.gen.ts (npm run gen:api).
  *
- * Convenciones: angulos en grados, distancias en metros (salvo sufijo _km), tiempos UTC ISO-8601.
+ * Conventions: angles in degrees, distances in meters (except _km suffix), UTC ISO-8601 timestamps.
  */
 
 export const CONTRACT_VERSION = "0.2.0";
@@ -23,7 +23,7 @@ export type EventType = "sunset" | "sunrise" | "earthset" | "earthrise";
 export type HorizonSource = "lola_dem" | "lola_dem_cached" | "spherical_analytical";
 export type ResolutionProfile = "mobile" | "tablet" | "desktop";
 
-/** Cadena ISO-8601 UTC, p. ej. "2027-01-01T00:00:00Z". */
+/** UTC ISO-8601 string, e.g. "2027-01-01T00:00:00Z". */
 export type UtcIsoString = string;
 
 export interface HardwareProfile {

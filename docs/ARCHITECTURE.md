@@ -1,31 +1,31 @@
 # ARCHITECTURE — Lunar Landing Site Navigator
 
-> **Propietario:** `lead-architect-auditor` · **Versión de contrato:** `0.1.0` · Requisitos: ver [CHALLENGE_SPEC.md](CHALLENGE_SPEC.md)
+> **Owner:** `lead-architect-auditor` · **Contract version:** `0.1.0` · Requirements: see [CHALLENGE_SPEC.md](CHALLENGE_SPEC.md)
 
-## 1. Principios
+## 1. Principles
 
-1. **Desacoplamiento estricto:** el backend científico no conoce la UI; el frontend no realiza cálculos astronómicos (solo formatea e interpola para animación).
-2. **Contrato primero:** `backend/app/models/schemas.py` (Pydantic v2) es la **fuente de verdad** del contrato. `frontend/src/types/contracts.ts` es su espejo; la paridad de nombres la comprueba `scripts/verify_environment.py` y, en Sprint 2, se generará `openapi.gen.ts` desde `/openapi.json`.
-3. **Oráculo antes que implementación:** toda función física tiene un test de oráculo analítico o una fixture de JPL Horizons antes de ser implementada.
-4. **Sin atmósfera:** no existe ningún término de refracción en ninguna capa (RT-03).
-5. **Determinismo y trazabilidad:** cada respuesta incluye `computation` (kernel, DEM, parámetros) para reproducir el resultado.
+1. **Strict decoupling:** the scientific backend is unaware of the UI; the frontend performs zero astronomical calculations (it only formats and interpolates for animation).
+2. **Contract first:** `backend/app/models/schemas.py` (Pydantic v2) is the **source of truth** for the contract. `frontend/src/types/contracts.ts` is its mirror; name parity is verified by `scripts/verify_environment.py`, and `openapi.gen.ts` can be generated from `/openapi.json`.
+3. **Oracle before implementation:** every physics function has an analytical oracle test or a JPL Horizons fixture before it is implemented.
+4. **Airless body:** zero atmospheric refraction terms exist in any layer (RT-03).
+5. **Determinism & traceability:** every response includes `computation` (kernel, DEM, parameters) to reproduce the result.
 
-## 2. Vista general
+## 2. System Overview
 
 ```mermaid
 flowchart LR
     subgraph DATA["data/"]
         K["ephemeris/ (SPICE: de421.bsp, moon_pa, moon tf, pck)"]
-        D["lola_dem/ (GeoTIFF estereografico polar)"]
+        D["lola_dem/ (South polar stereographic GeoTIFF)"]
         S["curated_sites.json"]
     end
     subgraph BE["backend/ (Python 3.12 + FastAPI)"]
         EPH["services/ephemeris (Skyfield, MOON_ME)"]
         TER["services/terrain (Rasterio + NumPy)"]
-        HOR["services/horizon (raycasting 360, sin refraccion)"]
-        VIS["services/visibility (estados, eventos, metricas)"]
+        HOR["services/horizon (360 raycasting, no refraction)"]
+        VIS["services/visibility (states, events, metrics)"]
         API["api/v1 (routers)"]
-        SCH["models/schemas.py (contrato)"]
+        SCH["models/schemas.py (contract)"]
     end
     subgraph FE["frontend/ (TS + React + Vite)"]
         SVC["services/apiClient.ts"]
@@ -44,58 +44,58 @@ flowchart LR
     SVC --> UI
 ```
 
-## 3. Backend científico (`backend/`)
+## 3. Scientific Backend (`backend/`)
 
-| Módulo | Responsabilidad | Dependencias clave | Propietario |
-|--------|-----------------|--------------------|-------------|
-| `app/services/ephemeris.py` | Az/El aparentes (sin refracción) de Sol y Tierra desde un punto selenográfico en MOON_ME, con libración física (PA) incluida | `skyfield`, kernels SPICE | astro-terrain-specialist |
-| `app/services/terrain.py` | Carga de DEM LOLA, proyección estereográfica polar, muestreo bilineal, nodata | `rasterio`, `pyproj`, `numpy` | astro-terrain-specialist |
-| `app/services/horizon.py` | Perfil de horizonte 360° (raycasting sobre círculos máximos), caché `.npz` | `numpy` | astro-terrain-specialist |
-| `app/services/visibility.py` | Estado visible/parcial/oculto, fracción de disco, eventos (sunset/earthset), métricas agregadas | `numpy`, `scipy` | astro-terrain-specialist |
-| `app/api/` | Routers FastAPI, validación, mapeo servicio→contrato | `fastapi` | fullstack-visualizer |
-| `app/models/schemas.py` | Contrato Pydantic versionado | `pydantic` | lead-architect-auditor |
-| `app/main.py` | Instancia FastAPI, CORS, montaje de routers | `fastapi` | fullstack-visualizer |
+| Module | Responsibility | Key Dependencies | Owner |
+|--------|----------------|------------------|-------|
+| `app/services/ephemeris.py` | Apparent Az/El (airless) of Sun and Earth from a selenographic point in MOON_ME, with physical libration (PA) included | `skyfield`, SPICE kernels | astro-terrain-specialist |
+| `app/services/terrain.py` | LOLA DEM loading, south polar stereographic projection, bilinear sampling, nodata | `rasterio`, `pyproj`, `numpy` | astro-terrain-specialist |
+| `app/services/horizon.py` | 360° horizon profile (great-circle raycasting), `.npz` cache | `numpy` | astro-terrain-specialist |
+| `app/services/visibility.py` | Visible/partial/occulted state, disk fraction, events (sunset/earthset), aggregate metrics | `numpy`, `scipy` | astro-terrain-specialist |
+| `app/api/` | FastAPI routers, validation, service→contract mapping | `fastapi` | fullstack-visualizer |
+| `app/models/schemas.py` | Versioned Pydantic contract | `pydantic` | lead-architect-auditor |
+| `app/main.py` | FastAPI app instance, CORS, router mounting | `fastapi` | fullstack-visualizer |
 
-**Stack:** Python 3.12 · FastAPI · Pydantic v2 · Skyfield · NumPy · Rasterio · pyproj · SciPy (búsqueda de raíces) · pytest.
+**Stack:** Python 3.12 · FastAPI · Pydantic v2 · Skyfield · NumPy · Rasterio · pyproj · SciPy (root finding) · pytest.
 
-### 3.1 Estrategia de rendimiento
+### 3.1 Performance Strategy
 
-- El horizonte depende solo del **sitio** (y del DEM/altura de mástil), no del tiempo → se calcula una vez y se cachea (`data/lola_dem/cache/`).
-- Las efemérides se vectorizan sobre el vector de tiempos de Skyfield (`ts.utc(..., range)`), un único `observe()` por cuerpo.
-- La visibilidad es una interpolación del perfil en el acimut de cada muestra temporal: `O(N_t)`.
-- Eventos: detección de cambio de signo en malla gruesa + refinamiento (Brent) a 1 s.
+- The horizon depends only on the **site** (and DEM / mast height), not on time → computed once and cached (`data/lola_dem/cache/`).
+- Ephemerides are vectorized across Skyfield's time array (`ts.utc(..., range)`), with a single `observe()` call per body.
+- Visibility is an interpolation of the horizon profile at each sample's azimuth: `O(N_t)`.
+- Events: sign-change detection on a coarse grid + Brent root refinement to 1 s.
 
-## 4. Frontend interactivo (`frontend/`)
+## 4. Interactive Frontend (`frontend/`)
 
-**Stack:** TypeScript (strict) · React · Vite · Three.js (terreno 3D y cúpula de horizonte) · Apache ECharts (curvas de elevación, bandas de ventanas) · Vitest.
+**Stack:** TypeScript (strict) · React · Vite · Three.js (3D terrain & horizon dome) · Apache ECharts (elevation curves, window bands) · Vitest.
 
-| Componente | Descripción | Contrato consumido |
-|------------|-------------|--------------------|
-| `SiteSelector` | Lista curada filtrable + entrada de coordenadas personalizadas | `CuratedSite[]` |
-| `TimeControls` | Ventana UTC, paso, reproducción/animación | `TimeWindow` |
-| `ComparisonGrid` | 1–4 columnas sincronizadas (lado a lado) o modo A/B secuencial | `ComparisonResult` |
-| `PolarMap2D` | Mapa estereográfico polar con sitios y métricas | `CuratedSite`, `SiteSummaryMetrics` |
-| `Terrain3D` | Malla de terreno local con iluminación direccional del Sol | (Sprint 3: `TerrainTile`) |
-| `HorizonDome` | Cúpula 360° con perfil de horizonte, Sol y Tierra a escala angular real, exageración vertical explícita | `HorizonProfile`, `VisibilitySample` |
-| `ElevationTimeline` | Elevación y "holgura" (elevación − horizonte) vs tiempo; bandas de luz/DTE | `VisibilityTimeSeries` |
-| `EventCountdown` | Tiempo restante hasta Sunset/Earthset + instante UTC | `EventPrediction` |
-| `ModeToggle` | Modo Ingeniero / Modo Educativo | — |
+| Component | Description | Contract Consumed |
+|-----------|-------------|-------------------|
+| `SiteSelector` | Filterable curated list + custom coordinate input | `CuratedSite[]` |
+| `TimeControls` | UTC window, step, playback animation | `TimeWindow` |
+| `ComparisonGrid` | 1–4 synchronized columns (side-by-side) or sequential A/B mode | `ComparisonResult` |
+| `PolarMap2D` | Polar stereographic map with sites and metrics | `CuratedSite`, `SiteSummaryMetrics` |
+| `Terrain3D` | Local terrain mesh with directional solar illumination | `TerrainPatch` |
+| `HorizonDome` | 360° dome with horizon profile, Sun and Earth at true angular scale, explicit vertical exaggeration | `HorizonProfile`, `VisibilitySample` |
+| `ElevationTimeline` | Elevation and clearance (elevation − horizon) vs time; light/DTE bands | `VisibilityTimeSeries` |
+| `EventCountdown` | Time remaining until Sunset/Earthset + UTC timestamp | `EventPrediction` |
+| `ModeToggle` | Engineer Mode / Educational Mode | — |
 
-## 5. Contratos JSON (API v1)
+## 5. JSON Contracts (API v1)
 
-Convenciones (ver también `AGENTS.md`): ángulos en **grados decimales**; distancias en **metros** (salvo sufijo `_km`);
-tiempos **UTC ISO-8601** con `Z`; longitudes **este-positivas** en [-180, 180]; acimut desde el **norte local**, sentido horario, [0, 360).
+Conventions (see also `AGENTS.md`): angles in **decimal degrees**; distances in **meters** (except `*_km` suffix);
+times in **UTC ISO-8601** with `Z`; **east-positive** longitudes in [-180, 180]; azimuth from **local north**, clockwise, [0, 360).
 
-| Método | Ruta | Request | Response |
-|--------|------|---------|----------|
+| Method | Route | Request | Response |
+|--------|-------|---------|----------|
 | GET | `/api/v1/health` | — | `HealthResponse` |
 | GET | `/api/v1/sites` | — | `CuratedSite[]` |
 | POST | `/api/v1/horizon` | `HorizonRequest` | `HorizonProfile` |
 | POST | `/api/v1/visibility` | `VisibilityRequest` | `VisibilityTimeSeries` |
 | POST | `/api/v1/compare` | `ComparisonRequest` | `ComparisonResult` |
-| * | errores | — | `ErrorResponse` (HTTP 4xx/5xx) |
+| * | errors | — | `ErrorResponse` (HTTP 4xx/5xx) |
 
-### 5.1 Ejemplo — `VisibilityRequest`
+### 5.1 Example — `VisibilityRequest`
 
 ```json
 {
@@ -118,27 +118,27 @@ tiempos **UTC ISO-8601** con `Z`; longitudes **este-positivas** en [-180, 180]; 
 }
 ```
 
-(Valores ilustrativos, no calculados.)
+(Illustrative values, not calculated.)
 
-### 5.3 Versionado
+### 5.3 Versioning
 
-- `CONTRACT_VERSION` en `schemas.py` y `contracts.ts` deben coincidir (comprobado por `verify_environment.py`).
-- Cambios incompatibles → incremento *minor* mientras `0.x`; registrar en §7.
+- `CONTRACT_VERSION` in `schemas.py` and `contracts.ts` must match (checked by `verify_environment.py`).
+- Breaking changes → *minor* bump while `0.x`; record in §7.
 
-## 6. Datos (`data/`)
+## 6. Data (`data/`)
 
-| Ruta | Contenido | Versionado en git |
-|------|-----------|-------------------|
-| `data/curated_sites.json` | Sitios curados con fuente y estado de verificación | Sí |
-| `data/ephemeris/` | Kernels SPICE (descarga reproducible, ver README) | No (solo README/manifiesto) |
-| `data/lola_dem/` | GeoTIFF LOLA + `cache/` de horizontes | No (solo README/manifiesto) |
+| Path | Contents | Versioned in git |
+|------|----------|------------------|
+| `data/curated_sites.json` | Curated sites with source and verification status | Yes |
+| `data/ephemeris/` | SPICE kernels (reproducible download, see README) | No (only README/manifest) |
+| `data/lola_dem/` | LOLA GeoTIFF + horizon `cache/` | No (only README/manifest) |
 
-## 7. Registro de decisiones (ADR resumido)
+## 7. Decision Log (Summary ADR)
 
-| # | Decisión | Motivo |
-|---|----------|--------|
-| ADR-001 | Skyfield en lugar de SpiceyPy | Pure-Python, soporta `PlanetaryConstants` + marco MOON_ME, vectorizado, instalación trivial en Windows |
-| ADR-002 | Horizonte precomputado por sitio | El horizonte es invariante en el tiempo → coste O(1) por muestra temporal |
-| ADR-003 | Rayos sobre círculos máximos (no rectas en el plano proyectado) | Exactitud en distancias de 100+ km cerca del polo |
-| ADR-004 | Esfera R = 1737.4 km como referencia | Coherente con la referencia de alturas de LOLA y con el reto |
-| ADR-005 | Tests de física ejecutables con `unittest` de la stdlib | Verificables sin dependencias externas; compatibles con pytest |
+| # | Decision | Rationale |
+|---|----------|-----------|
+| ADR-001 | Skyfield instead of SpiceyPy | Pure-Python, supports `PlanetaryConstants` + MOON_ME frame, vectorized, trivial installation on Windows |
+| ADR-002 | Precomputed per-site horizon | Horizon is time-invariant → O(1) cost per time sample |
+| ADR-003 | Great-circle rays (not straight lines on projected plane) | Accuracy over 100+ km distances near the pole |
+| ADR-004 | Sphere R = 1737.4 km as reference | Consistent with LOLA height reference and challenge spec |
+| ADR-005 | Physics tests runnable with stdlib `unittest` | Verifiable without external dependencies; compatible with pytest |

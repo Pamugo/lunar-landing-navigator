@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Verificador integral del entorno e infraestructura del proyecto Lunar Landing Site Navigator.
+"""Comprehensive environment and infrastructure verifier for Lunar Landing Site Navigator.
 
-Propietario: qa-verification-agent.
-Usa exclusivamente la libreria estandar de Python para poder ejecutarse en Fase 0 antes de
-instalar dependencias de terceros.
+Owner: qa-verification-agent.
+Uses only the Python standard library so it can run in Phase 0 before
+installing third-party dependencies.
 
-Uso:
+Usage:
     python scripts/verify_environment.py [--json] [--strict]
 """
 
@@ -58,7 +58,7 @@ def _parse_frontmatter(text: str) -> dict[str, str] | None:
 
 
 def check_docs(results: list[CheckResult]) -> None:
-    cat = "1. Documentacion y Gobernanza"
+    cat = "1. Documentation & Governance"
     required_files = [
         "AGENTS.md",
         "CLAUDE.md",
@@ -73,9 +73,9 @@ def check_docs(results: list[CheckResult]) -> None:
     for rel in required_files:
         path = ROOT / rel
         if path.is_file() and path.stat().st_size > 10:
-            results.append(CheckResult(cat, rel, "PASS", f"Existe ({path.stat().st_size} B)"))
+            results.append(CheckResult(cat, rel, "PASS", f"Exists ({path.stat().st_size} B)"))
         else:
-            results.append(CheckResult(cat, rel, "FAIL", "No existe o esta vacio"))
+            results.append(CheckResult(cat, rel, "FAIL", "Missing or empty"))
 
     spec_path = ROOT / "docs/CHALLENGE_SPEC.md"
     if spec_path.is_file():
@@ -83,9 +83,9 @@ def check_docs(results: list[CheckResult]) -> None:
         expected_ids = [f"RF-0{i}" for i in range(1, 8)] + [f"RT-0{i}" for i in range(1, 5)]
         missing = [req_id for req_id in expected_ids if req_id not in spec_text]
         if not missing:
-            results.append(CheckResult(cat, "Matriz RF-01..07 / RT-01..04", "PASS", "11/11 IDs trazados en CHALLENGE_SPEC.md"))
+            results.append(CheckResult(cat, "RF-01..07 / RT-01..04 Matrix", "PASS", "11/11 IDs traced in CHALLENGE_SPEC.md"))
         else:
-            results.append(CheckResult(cat, "Matriz RF-01..07 / RT-01..04", "FAIL", f"Faltan IDs: {missing}"))
+            results.append(CheckResult(cat, "RF-01..07 / RT-01..04 Matrix", "FAIL", f"Missing IDs: {missing}"))
 
     math_path = ROOT / "docs/MATH_MODELS.md"
     if math_path.is_file():
@@ -93,21 +93,21 @@ def check_docs(results: list[CheckResult]) -> None:
         has_radius = "1737.4" in math_text or "1 737 400" in math_text
         has_formula = "tan" in math_text and "cos" in math_text and "sin" in math_text
         if has_radius and has_formula:
-            results.append(CheckResult(cat, "Ecuaciones MATH_MODELS.md", "PASS", "Incluye R=1737.4 km y formula esferica de horizonte"))
+            results.append(CheckResult(cat, "MATH_MODELS.md Equations", "PASS", "Includes R=1737.4 km and spherical horizon formula"))
         else:
-            results.append(CheckResult(cat, "Ecuaciones MATH_MODELS.md", "FAIL", "Faltan constantes o formula de horizonte"))
+            results.append(CheckResult(cat, "MATH_MODELS.md Equations", "FAIL", "Missing constants or horizon formula"))
 
     claude_path = ROOT / "CLAUDE.md"
     if claude_path.is_file():
         claude_text = claude_path.read_text(encoding="utf-8")
         if "@AGENTS.md" in claude_text:
-            results.append(CheckResult(cat, "Sincronizacion CLAUDE.md -> @AGENTS.md", "PASS", "Importa @AGENTS.md"))
+            results.append(CheckResult(cat, "CLAUDE.md -> @AGENTS.md Sync", "PASS", "Imports @AGENTS.md"))
         else:
-            results.append(CheckResult(cat, "Sincronizacion CLAUDE.md -> @AGENTS.md", "FAIL", "CLAUDE.md no importa @AGENTS.md"))
+            results.append(CheckResult(cat, "CLAUDE.md -> @AGENTS.md Sync", "FAIL", "CLAUDE.md does not import @AGENTS.md"))
 
 
 def check_structure(results: list[CheckResult]) -> None:
-    cat = "2. Estructura del Repositorio"
+    cat = "2. Repository Structure"
     expected_paths = [
         "backend/pyproject.toml",
         "backend/app/main.py",
@@ -131,13 +131,13 @@ def check_structure(results: list[CheckResult]) -> None:
     for rel in expected_paths:
         path = ROOT / rel
         if path.exists():
-            results.append(CheckResult(cat, rel, "PASS", "Presente"))
+            results.append(CheckResult(cat, rel, "PASS", "Present"))
         else:
-            results.append(CheckResult(cat, rel, "FAIL", "Ruta inexistente"))
+            results.append(CheckResult(cat, rel, "FAIL", "Path does not exist"))
 
 
 def check_skills_agents_commands(results: list[CheckResult]) -> None:
-    cat_skills = "3. Skills Especializadas (skills/*/SKILL.md)"
+    cat_skills = "3. Specialized Skills (skills/*/SKILL.md)"
     expected_skills = [
         "lunar-ephemeris",
         "lola-topography-horizon",
@@ -148,15 +148,15 @@ def check_skills_agents_commands(results: list[CheckResult]) -> None:
         rel = f"skills/{skill_name}/SKILL.md"
         path = ROOT / rel
         if not path.is_file():
-            results.append(CheckResult(cat_skills, rel, "FAIL", "No existe"))
+            results.append(CheckResult(cat_skills, rel, "FAIL", "Missing"))
             continue
         fm = _parse_frontmatter(path.read_text(encoding="utf-8"))
         if fm and fm.get("name") == skill_name and len(fm.get("description", "")) > 20:
-            results.append(CheckResult(cat_skills, rel, "PASS", f"name='{skill_name}', description valida"))
+            results.append(CheckResult(cat_skills, rel, "PASS", f"name='{skill_name}', valid description"))
         else:
-            results.append(CheckResult(cat_skills, rel, "FAIL", "Frontmatter YAML ausente o invalido"))
+            results.append(CheckResult(cat_skills, rel, "FAIL", "Missing or invalid YAML frontmatter"))
 
-    cat_agents = "4. Subagentes (.claude/agents/*.md)"
+    cat_agents = "4. Subagents (.claude/agents/*.md)"
     expected_agents = [
         "lead-architect-auditor",
         "astro-terrain-specialist",
@@ -167,47 +167,47 @@ def check_skills_agents_commands(results: list[CheckResult]) -> None:
         rel = f".claude/agents/{agent_name}.md"
         path = ROOT / rel
         if not path.is_file():
-            results.append(CheckResult(cat_agents, rel, "FAIL", "No existe"))
+            results.append(CheckResult(cat_agents, rel, "FAIL", "Missing"))
             continue
         fm = _parse_frontmatter(path.read_text(encoding="utf-8"))
         if fm and fm.get("name") == agent_name and fm.get("description"):
-            results.append(CheckResult(cat_agents, rel, "PASS", f"Agente '{agent_name}' configurado"))
+            results.append(CheckResult(cat_agents, rel, "PASS", f"Agent '{agent_name}' configured"))
         else:
-            results.append(CheckResult(cat_agents, rel, "FAIL", "Frontmatter YAML ausente o invalido"))
+            results.append(CheckResult(cat_agents, rel, "FAIL", "Missing or invalid YAML frontmatter"))
 
-    cat_cmds = "5. Comandos Slash (.claude/commands/*.md)"
+    cat_cmds = "5. Slash Commands (.claude/commands/*.md)"
     expected_cmds = ["verify-env", "verify-physics", "audit-challenge", "plan-feature"]
     for cmd_name in expected_cmds:
         rel = f".claude/commands/{cmd_name}.md"
         path = ROOT / rel
         if not path.is_file():
-            results.append(CheckResult(cat_cmds, rel, "FAIL", "No existe"))
+            results.append(CheckResult(cat_cmds, rel, "FAIL", "Missing"))
             continue
         fm = _parse_frontmatter(path.read_text(encoding="utf-8"))
         if fm and fm.get("description"):
-            results.append(CheckResult(cat_cmds, rel, "PASS", f"/{cmd_name} configurado"))
+            results.append(CheckResult(cat_cmds, rel, "PASS", f"/{cmd_name} configured"))
         else:
-            results.append(CheckResult(cat_cmds, rel, "FAIL", "Frontmatter 'description' ausente"))
+            results.append(CheckResult(cat_cmds, rel, "FAIL", "Missing 'description' frontmatter"))
 
 
 def check_curated_sites(results: list[CheckResult]) -> None:
-    cat = "6. Sitios Curados (data/curated_sites.json)"
+    cat = "6. Curated Sites (data/curated_sites.json)"
     path = ROOT / "data/curated_sites.json"
     if not path.is_file():
-        results.append(CheckResult(cat, "data/curated_sites.json", "FAIL", "Archivo no encontrado"))
+        results.append(CheckResult(cat, "data/curated_sites.json", "FAIL", "File not found"))
         return
 
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        results.append(CheckResult(cat, "data/curated_sites.json", "FAIL", f"JSON invalido: {exc}"))
+        results.append(CheckResult(cat, "data/curated_sites.json", "FAIL", f"Invalid JSON: {exc}"))
         return
 
     sites = payload.get("sites", [])
     if len(sites) >= 6:
-        results.append(CheckResult(cat, "Numero de sitios curados (>= 6)", "PASS", f"{len(sites)} sitios cargados"))
+        results.append(CheckResult(cat, "Curated site count (>= 6)", "PASS", f"{len(sites)} sites loaded"))
     else:
-        results.append(CheckResult(cat, "Numero de sitios curados (>= 6)", "FAIL", f"Solo {len(sites)} sitios"))
+        results.append(CheckResult(cat, "Curated site count (>= 6)", "FAIL", f"Only {len(sites)} sites"))
 
     required_keys = {
         "id",
@@ -228,26 +228,26 @@ def check_curated_sites(results: list[CheckResult]) -> None:
     }
     hw_profiles = payload.get("hardware_profiles", [])
     if len(hw_profiles) >= 4:
-        results.append(CheckResult(cat, "Perfiles de hardware CSA/NASA (>= 4)", "PASS", f"{len(hw_profiles)} perfiles cargados"))
+        results.append(CheckResult(cat, "CSA/NASA hardware profiles (>= 4)", "PASS", f"{len(hw_profiles)} profiles loaded"))
     else:
-        results.append(CheckResult(cat, "Perfiles de hardware CSA/NASA (>= 4)", "FAIL", f"Solo {len(hw_profiles)} perfiles"))
+        results.append(CheckResult(cat, "CSA/NASA hardware profiles (>= 4)", "FAIL", f"Only {len(hw_profiles)} profiles"))
     ids_seen: set[str] = set()
     errors: list[str] = []
     for idx, site in enumerate(sites):
         missing = required_keys - set(site.keys())
         if missing:
-            errors.append(f"sitio[{idx}] sin claves {sorted(missing)}")
+            errors.append(f"site[{idx}] missing keys {sorted(missing)}")
             continue
         sid = site["id"]
         if sid in ids_seen:
-            errors.append(f"id duplicado: {sid}")
+            errors.append(f"duplicate id: {sid}")
         ids_seen.add(sid)
         lat = float(site["lat_deg"])
         lon = float(site["lon_deg"])
         if not (-90.0 <= lat <= 90.0):
-            errors.append(f"{sid}: lat_deg fuera de [-90, 90]: {lat}")
+            errors.append(f"{sid}: lat_deg out of [-90, 90]: {lat}")
         if not (-180.0 <= lon <= 180.0):
-            errors.append(f"{sid}: lon_deg fuera de [-180, 180]: {lon}")
+            errors.append(f"{sid}: lon_deg out of [-180, 180]: {lon}")
 
     mandatory_ids = {
         "apollo-11",
@@ -259,27 +259,27 @@ def check_curated_sites(results: list[CheckResult]) -> None:
     missing_mandatory = mandatory_ids - ids_seen
     has_leibnitz_or_nobile = bool({"mons-mouton-leibnitz-beta", "nobile-rim-1"} & ids_seen)
     if missing_mandatory or not has_leibnitz_or_nobile:
-        errors.append(f"faltan sitios requeridos: {sorted(missing_mandatory)}")
+        errors.append(f"missing required sites: {sorted(missing_mandatory)}")
 
     if not errors:
         results.append(
             CheckResult(
                 cat,
-                "Esquema y rangos selenograficos MOON_ME",
+                "MOON_ME schema and selenographic ranges",
                 "PASS",
-                f"IDs validos: {', '.join(sorted(ids_seen))}",
+                f"Valid IDs: {', '.join(sorted(ids_seen))}",
             )
         )
     else:
-        results.append(CheckResult(cat, "Esquema y rangos selenograficos MOON_ME", "FAIL", "; ".join(errors)))
+        results.append(CheckResult(cat, "MOON_ME schema and selenographic ranges", "FAIL", "; ".join(errors)))
 
 
 def check_contract_parity(results: list[CheckResult]) -> None:
-    cat = "7. Paridad de Contratos (Python AST <-> TypeScript)"
+    cat = "7. Contract Parity (Python AST <-> TypeScript)"
     py_path = ROOT / "backend/app/models/schemas.py"
     ts_path = ROOT / "frontend/src/types/contracts.ts"
     if not py_path.is_file() or not ts_path.is_file():
-        results.append(CheckResult(cat, "Archivos de contrato", "FAIL", "Falta schemas.py o contracts.ts"))
+        results.append(CheckResult(cat, "Contract files", "FAIL", "Missing schemas.py or contracts.ts"))
         return
 
     py_tree = ast.parse(py_path.read_text(encoding="utf-8"), filename=str(py_path))
@@ -319,7 +319,7 @@ def check_contract_parity(results: list[CheckResult]) -> None:
     ts_version = ver_match.group(1) if ver_match else None
 
     if py_version and py_version == ts_version:
-        results.append(CheckResult(cat, "CONTRACT_VERSION", "PASS", f"v{py_version} coincide en Python y TS"))
+        results.append(CheckResult(cat, "CONTRACT_VERSION", "PASS", f"v{py_version} matches in Python and TS"))
     else:
         results.append(CheckResult(cat, "CONTRACT_VERSION", "FAIL", f"Python={py_version!r} vs TS={ts_version!r}"))
 
@@ -333,14 +333,14 @@ def check_contract_parity(results: list[CheckResult]) -> None:
 
     missing_enums = sorted(py_enums - ts_types)
     if not missing_enums:
-        results.append(CheckResult(cat, "Enums exportados en TS", "PASS", f"{len(py_enums)} enums sincronizados"))
+        results.append(CheckResult(cat, "Exported TS Enums", "PASS", f"{len(py_enums)} synchronized enums"))
     else:
-        results.append(CheckResult(cat, "Enums exportados en TS", "FAIL", f"Faltan en TS: {missing_enums}"))
+        results.append(CheckResult(cat, "Exported TS Enums", "FAIL", f"Missing in TS: {missing_enums}"))
 
     mismatches: list[str] = []
     for model_name, py_fields in py_models.items():
         if model_name not in ts_interfaces:
-            mismatches.append(f"falta interface {model_name}")
+            mismatches.append(f"missing interface {model_name}")
             continue
         ts_fields = ts_interfaces[model_name]
         if py_fields != ts_fields:
@@ -350,17 +350,17 @@ def check_contract_parity(results: list[CheckResult]) -> None:
         results.append(
             CheckResult(
                 cat,
-                "Modelos Pydantic <-> Interfaces TS",
+                "Pydantic Models <-> TS Interfaces",
                 "PASS",
-                f"{len(py_models)} modelos y sus campos coinciden exactamente",
+                f"{len(py_models)} models and their fields match identically",
             )
         )
     else:
-        results.append(CheckResult(cat, "Modelos Pydantic <-> Interfaces TS", "FAIL", "; ".join(mismatches)))
+        results.append(CheckResult(cat, "Pydantic Models <-> TS Interfaces", "FAIL", "; ".join(mismatches)))
 
 
 def check_no_refraction_guard(results: list[CheckResult]) -> None:
-    cat = "8. Guardia Fisica RT-03 (Sin Refraccion Atmosferica)"
+    cat = "8. Physical Guard RT-03 (No Atmospheric Refraction)"
     offending: list[str] = []
     for folder in (ROOT / "backend/app", ROOT / "frontend/src"):
         if not folder.exists():
@@ -373,7 +373,7 @@ def check_no_refraction_guard(results: list[CheckResult]) -> None:
                 if stripped.startswith(("#", "//", "*", '"""', "'''")):
                     continue
                 if "refract" in stripped.lower():
-                    # Solo se permite el campo informativo refraction: False / false / AIRLESS en el contrato o sello
+                    # Only allow the informational refraction: False / false / AIRLESS field in the contract or seal
                     if any(
                         allowed in stripped
                         for allowed in (
@@ -391,13 +391,13 @@ def check_no_refraction_guard(results: list[CheckResult]) -> None:
                     offending.append(f"{file_path.relative_to(ROOT)}:{lineno}")
 
     if not offending:
-        results.append(CheckResult(cat, "Escaneo de terminos de refraccion", "PASS", "0 modelos de refraccion en codigo"))
+        results.append(CheckResult(cat, "Refraction term scan", "PASS", "0 refraction models in code"))
     else:
-        results.append(CheckResult(cat, "Escaneo de terminos de refraccion", "FAIL", f"Revisar: {offending}"))
+        results.append(CheckResult(cat, "Refraction term scan", "FAIL", f"Review: {offending}"))
 
 
 def check_physics_suite(results: list[CheckResult]) -> None:
-    cat = "9. Suite de Oraculos Fisicos (backend/tests)"
+    cat = "9. Physics Oracle Suite (backend/tests)"
     backend_dir = str(ROOT / "backend")
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
@@ -417,7 +417,7 @@ def check_physics_suite(results: list[CheckResult]) -> None:
                 cat,
                 "unittest discover backend/tests",
                 "PASS",
-                f"{ran} ejecutados, {ran - skipped} en verde, {skipped} omitidos (oraculos Sprint 1), 0 fallos",
+                f"{ran} run, {ran - skipped} passed, {skipped} skipped, 0 failures",
             )
         )
     else:
@@ -426,13 +426,13 @@ def check_physics_suite(results: list[CheckResult]) -> None:
                 cat,
                 "unittest discover backend/tests",
                 "FAIL",
-                f"Ejecutados={ran}, Fallos/Errores={failed}\n{stream.getvalue()}",
+                f"Run={ran}, Failures/Errors={failed}\n{stream.getvalue()}",
             )
         )
 
 
 def check_toolchains(results: list[CheckResult]) -> None:
-    cat = "10. Herramientas y Dependencias (Runtime)"
+    cat = "10. Toolchains & Dependencies (Runtime)"
     py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     if sys.version_info >= (3, 12):
         results.append(CheckResult(cat, "Python >= 3.12", "PASS", f"Python {py_ver} ({sys.executable})"))
@@ -442,14 +442,14 @@ def check_toolchains(results: list[CheckResult]) -> None:
     for pkg in ("pydantic", "fastapi", "numpy", "scipy", "skyfield", "rasterio", "pyproj", "pytest"):
         found = importlib.util.find_spec(pkg) is not None
         if found:
-            results.append(CheckResult(cat, f"Paquete Python '{pkg}'", "PASS", "Instalado"))
+            results.append(CheckResult(cat, f"Python package '{pkg}'", "PASS", "Installed"))
         else:
             results.append(
                 CheckResult(
                     cat,
-                    f"Paquete Python '{pkg}'",
+                    f"Python package '{pkg}'",
                     "WARN",
-                    "Pendiente de instalar para Sprint 1 (cd backend && pip install -e .[dev])",
+                    "Pending install (cd backend && pip install -e .[dev])",
                 )
             )
 
@@ -461,17 +461,17 @@ def check_toolchains(results: list[CheckResult]) -> None:
             if fallback.is_file():
                 which = str(fallback)
         if which:
-            results.append(CheckResult(cat, f"Binario '{binary}'", "PASS", which))
+            results.append(CheckResult(cat, f"Binary '{binary}'", "PASS", which))
         else:
             status = "FAIL" if binary == "git" else "WARN"
-            msg = "No encontrado en PATH (requerido en Sprint 2 para frontend)" if status == "WARN" else "Requerido"
-            results.append(CheckResult(cat, f"Binario '{binary}'", status, msg))
+            msg = "Not found in PATH (required for frontend)" if status == "WARN" else "Required"
+            results.append(CheckResult(cat, f"Binary '{binary}'", status, msg))
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Verifica el entorno del Lunar Landing Site Navigator.")
-    parser.add_argument("--json", action="store_true", help="Emite la salida en formato JSON.")
-    parser.add_argument("--strict", action="store_true", help="Trata los WARN como errores (exit 1).")
+    parser = argparse.ArgumentParser(description="Verifies the Lunar Landing Site Navigator environment.")
+    parser.add_argument("--json", action="store_true", help="Emit output as JSON.")
+    parser.add_argument("--strict", action="store_true", help="Treat WARN checks as errors (exit 1).")
     args = parser.parse_args()
 
     results: list[CheckResult] = []
@@ -501,7 +501,7 @@ def main() -> int:
         )
     else:
         print("=" * 88)
-        print(" LUNAR LANDING SITE NAVIGATOR — VERIFICACION DEL ENTORNO (Fase 0)")
+        print(" LUNAR LANDING SITE NAVIGATOR — ENVIRONMENT VERIFICATION (Phase 0)")
         print("=" * 88)
         current_cat = ""
         for r in results:
@@ -510,7 +510,7 @@ def main() -> int:
                 print(f"\n[{current_cat}]")
             print(f"  [{r.status:4s}] {r.item:<48s} -> {r.detail}")
         print("\n" + "-" * 88)
-        print(f" RESUMEN: {n_pass} PASS | {n_warn} WARN | {n_fail} FAIL")
+        print(f" SUMMARY: {n_pass} PASS | {n_warn} WARN | {n_fail} FAIL")
         print("-" * 88)
 
     if n_fail > 0 or (args.strict and n_warn > 0):

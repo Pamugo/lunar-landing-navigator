@@ -12,7 +12,7 @@ venv/
 node_modules/
 frontend/dist/
 
-# Datos pesados (descarga reproducible, ver READMEs)
+# Heavy data (reproducible download, see READMEs)
 data/ephemeris/*.bsp
 data/ephemeris/*.bpc
 data/ephemeris/*.tf
@@ -24,7 +24,7 @@ frontend/public/textures/south_pole_lola_hires.png
 *.tiff
 *.img
 
-# Sistema / IDE
+# System / IDE
 .DS_Store
 Thumbs.db
 .vscode/

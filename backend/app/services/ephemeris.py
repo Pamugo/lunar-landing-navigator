@@ -1,8 +1,8 @@
-"""Motor de efemerides lunares en marco MOON_ME con libracion fisica y sin refraccion (RT-01, RT-03).
+"""Airless lunar ephemeris engine in the MOON_ME frame with physical libration (RT-01, RT-03).
 
-Propietario: astro-terrain-specialist.
-Referencia matematica: docs/MATH_MODELS.md §1 (transformacion selenografica -> topocentrica con libracion) y §3.1 (radio angular aparente).
-Procedimiento: skills/lunar-ephemeris/SKILL.md.
+Owner: astro-terrain-specialist.
+Math reference: docs/MATH_MODELS.md §1 (selenographic -> topocentric transform with libration) and §3.1 (apparent angular radius).
+Procedure: skills/lunar-ephemeris/SKILL.md.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ class EphemerisSampleDict(TypedDict):
 
 @lru_cache(maxsize=2)
 def _load_lunar_context(kernel: EphemerisKernel = EphemerisKernel.DE421) -> dict[str, object]:
-    """Carga singleton de kernels SPICE y construye el marco MOON_ME_DE421 con libracion fisica (MATH_MODELS §1.2)."""
+    """Singleton loader for SPICE kernels; constructs the MOON_ME_DE421 frame with physical libration (MATH_MODELS §1.2)."""
     load = Loader(str(EPHEMERIS_DIR))
     ts = load.timescale()
     bsp_name = "de421.bsp" if kernel == EphemerisKernel.DE421 else "de440s.bsp"
@@ -75,10 +75,10 @@ def compute_body_ephemeris(
     site_elevation_m: float = 0.0,
     kernel: EphemerisKernel = EphemerisKernel.DE421,
 ) -> list[EphemerisSampleDict]:
-    """Calcula Az/El aparentes (con tiempo-luz y aberracion, SIN refraccion atmosferica) en MOON_ME.
+    """Computes apparent airless Az/El (with light-time and aberration) in MOON_ME.
 
-    Referencia: docs/MATH_MODELS.md §1.1-1.5 y §3.1.
-    Internamente opera en radianes y convierte a grados decimales en el diccionario de salida.
+    Reference: docs/MATH_MODELS.md §1.1-1.5 and §3.1.
+    Internally operates in radians and converts to decimal degrees in the output dictionary.
     """
     if not times_utc:
         return []
@@ -90,7 +90,7 @@ def compute_body_ephemeris(
     frame_me = ctx["frame_me"]
 
     total_elevation_m = float(site_elevation_m) + float(site.observer_height_m)
-    # Normaliza latitud muy cercana al polo exacto para evitar singularidad de meridiano (MATH_MODELS §1.4)
+    # Normalize latitude near the exact pole to avoid meridian singularity (MATH_MODELS §1.4)
     lat_deg = float(site.lat_deg)
     if abs(lat_deg) > 89.9999:
         lat_deg = math.copysign(89.9999, lat_deg)
@@ -104,7 +104,7 @@ def compute_body_ephemeris(
 
     target = eph[body]  # type: ignore[index]
     apparent = observer.at(t_vec).observe(target).apparent()
-    # Sin temperature_C ni pressure_mbar -> CERO refraccion atmosferica (RT-03)
+    # No temperature_C or pressure_mbar -> ZERO atmospheric bending (RT-03)
     alt, az, dist = apparent.altaz()
 
     el_rad_arr = np.asarray(alt.radians, dtype=np.float64)
@@ -138,7 +138,7 @@ def compute_body_ephemeris(
 
 @lru_cache(maxsize=1)
 def compute_scientific_verification_seal() -> ScientificVerificationSeal:
-    """Evalua la precision real del motor frente a las fixtures de NASA JPL Horizons (RT-01, RT-04)."""
+    """Evaluates actual engine accuracy against NASA JPL Horizons fixtures (RT-01, RT-04)."""
     if not HORIZONS_FIXTURE_PATH.is_file():
         return ScientificVerificationSeal(
             validation_id="VAL-20261114-02",

@@ -1,38 +1,65 @@
 import { useState } from "react";
-import type { HorizonProfile, VisibilitySample } from "../types/contracts";
+import { useLanguage } from "../i18n/LanguageContext";
+import { getShortSiteName } from "../i18n/translations";
+import type { CuratedSite, HorizonProfile, LunarCoordinate, VisibilitySample } from "../types/contracts";
 import type { AppMode } from "./HeaderHUD";
 
 export interface HorizonDomeProps {
   profile: HorizonProfile | null;
   currentSample: VisibilitySample | null;
   mode: AppMode;
+  hasSelection?: boolean;
+  curatedSites?: CuratedSite[];
+  selectedSites?: LunarCoordinate[];
+  focusedIndex?: number;
+  onSelectSiteIndex?: (index: number) => void;
 }
 
 const EXAGGERATION_OPTIONS = [1, 5, 10, 20] as const;
 
-export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) {
-  const [verticalExaggeration, setVerticalExaggeration] = useState<number>(10);
+export function HorizonDome({
+  profile,
+  currentSample,
+  mode,
+  hasSelection = true,
+  curatedSites = [],
+  selectedSites = [],
+  focusedIndex = 0,
+  onSelectSiteIndex,
+}: HorizonDomeProps) {
+  const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1);
+  const { lang, t } = useLanguage();
 
   if (!profile) {
     return (
-      <div className="viewport-stage" style={{ display: "grid", placeItems: "center" }}>
-        <span className="mono-telemetry">Cargando perfil de horizonte 360°...</span>
+      <div className="viewport-stage" style={{ display: "grid", placeItems: "center", padding: "16px", textAlign: "center" }}>
+        <span className="mono-telemetry" style={{ color: "var(--text-secondary)" }}>
+          {hasSelection ? t.dome.loading : t.dome.noSiteSelected}
+        </span>
       </div>
     );
   }
 
+  const hasSiteSelector = selectedSites.length > 0 && Boolean(onSelectSiteIndex);
   const width = 760;
   const height = 360;
   const padLeft = 46;
   const padRight = 18;
-  const padTop = 36;
-  const padBottom = 34;
+  const padTop = hasSiteSelector ? 82 : 46;
+  const padBottom = 46;
   const plotW = width - padLeft - padRight;
   const plotH = height - padTop - padBottom;
 
-  // Rango angular base [-12°, +24°] escalado por la exageracion vertical seleccionada
-  const minEl = -12.0 / Math.max(1, verticalExaggeration * 0.35);
-  const maxEl = 24.0 / Math.max(1, verticalExaggeration * 0.35);
+  // Angular range up to +90° at ×1, with progressive zoom-in for ×5, ×10, ×20
+  const scaleConfig =
+    verticalExaggeration === 1
+      ? { minEl: -15.0, maxEl: 90.0, ticks: [-15, 0, 15, 30, 45, 60, 75, 90] }
+      : verticalExaggeration === 5
+        ? { minEl: -6.0, maxEl: 24.0, ticks: [-6, 0, 6, 12, 18, 24] }
+        : verticalExaggeration === 10
+          ? { minEl: -4.0, maxEl: 12.0, ticks: [-3, 0, 3, 6, 9, 12] }
+          : { minEl: -3.0, maxEl: 6.0, ticks: [-3, -1, 0, 1, 2, 3, 4, 5, 6] };
+  const { minEl, maxEl, ticks: referenceTicks } = scaleConfig;
 
   const azToX = (az_deg: number) => padLeft + ((az_deg % 360) / 360.0) * plotW;
   const elToY = (el_deg: number) => {
@@ -43,7 +70,7 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
 
   const zeroY = elToY(0.0);
 
-  // Construir poligono de silueta topografica LOLA 360°
+  // Build 360° LOLA topographic silhouette polygon
   const pts = profile.azimuths_deg.map((az, idx) => {
     const el = profile.horizon_elevation_deg[idx] ?? 0.0;
     return `${azToX(az).toFixed(1)},${elToY(el).toFixed(1)}`;
@@ -58,39 +85,93 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
 
   const sourceBadge =
     profile.horizon_source === "spherical_analytical"
-      ? "Fallback Esférico Analítico (R = 1737.4 km)"
-      : `LOLA Polar DEM (${profile.dem_product})`;
+      ? t.dome.sphericalFallback
+      : `${t.dome.lolaPolarDem} (${profile.dem_product})`;
 
   return (
-    <div className="viewport-stage" aria-label="Cupula panoramica 360 grados del horizonte local">
-      <div className="viewport-overlay-top">
-        <div className="hud-pill">
-          <span>Fuente Topográfica:</span>
-          <strong className="mono-telemetry" style={{ color: "#38BDF8" }}>
-            {sourceBadge}
-          </strong>
+    <div className="viewport-stage" aria-label={t.dome.stageAria}>
+      <div className="viewport-overlay-top" style={{ flexDirection: "column", alignItems: "stretch", gap: "6px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", flexWrap: "wrap" }}>
+          {mode === "eng" ? (
+            <div className="hud-pill">
+              <span>{t.dome.topographicSourceLabel}</span>
+              <strong className="mono-telemetry" style={{ color: "#38BDF8" }}>
+                {sourceBadge}
+              </strong>
+            </div>
+          ) : (
+            <div />
+          )}
+
+          <div className="hud-pill" role="group" aria-label={t.dome.exaggerationAria}>
+            <span>{t.dome.verticalScaleLabel} ×{verticalExaggeration}:</span>
+            {EXAGGERATION_OPTIONS.map((factor) => (
+              <button
+                key={factor}
+                type="button"
+                className={`hud-btn-mini ${verticalExaggeration === factor ? "active" : ""}`}
+                onClick={() => setVerticalExaggeration(factor)}
+              >
+                ×{factor}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="hud-pill" role="group" aria-label="Selector de exageracion vertical">
-          <span>Escala vertical ×{verticalExaggeration}:</span>
-          {EXAGGERATION_OPTIONS.map((factor) => (
-            <button
-              key={factor}
-              type="button"
-              className={`hud-btn-mini ${verticalExaggeration === factor ? "active" : ""}`}
-              onClick={() => setVerticalExaggeration(factor)}
-            >
-              ×{factor}
-            </button>
-          ))}
-        </div>
+        {selectedSites.length > 0 && onSelectSiteIndex && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              flexWrap: "wrap",
+              background: "rgba(11, 15, 25, 0.88)",
+              backdropFilter: "blur(8px)",
+              padding: "5px 9px",
+              borderRadius: "6px",
+              border: "1px solid rgba(56, 189, 248, 0.28)",
+            }}
+          >
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#93C5FD" }}>
+              {t.dome.siteSelectorLabel}
+            </span>
+            {selectedSites.map((coord, idx) => {
+              const cur = curatedSites.find((s) => s.id === coord.site_id);
+              const label = cur
+                ? getShortSiteName(cur, lang)
+                : `${t.terrain.customSiteShort} (${coord.lat_deg.toFixed(2)}°, ${coord.lon_deg.toFixed(2)}°)`;
+              const isActive = idx === focusedIndex;
+              return (
+                <button
+                  key={`${coord.site_id ?? "custom"}_${coord.lat_deg}_${coord.lon_deg}_${idx}`}
+                  type="button"
+                  className={`hud-btn-mini ${isActive ? "active" : ""}`}
+                  style={
+                    isActive
+                      ? {
+                          background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
+                          color: "#FFFFFF",
+                          borderColor: "#34D399",
+                          fontWeight: 700,
+                        }
+                      : undefined
+                  }
+                  onClick={() => onSelectSiteIndex(idx)}
+                >
+                  {isActive ? "👁️ " : ""}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <svg
         viewBox={`0 0 ${width} ${height}`}
         style={{ width: "100%", height: "100%", display: "block" }}
         role="img"
-        aria-label="Perfil de horizonte 360 grados con posicion del Sol y la Tierra"
+        aria-label={t.dome.svgAria}
       >
         <defs>
           <linearGradient id="terrainFillGrad" x1="0" y1="0" x2="0" y2="1">
@@ -99,8 +180,8 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
           </linearGradient>
         </defs>
 
-        {/* Lineas horizontales de elevacion */}
-        {[-6, -3, 0, 3, 6, 12].map((deg) => {
+        {/* Horizontal elevation reference lines */}
+        {referenceTicks.map((deg) => {
           if (deg < minEl || deg > maxEl) return null;
           const y = elToY(deg);
           return (
@@ -127,17 +208,17 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
           );
         })}
 
-        {/* Puntos cardinales N / E / S / W */}
+        {/* Cardinal points N / E / S / W */}
         {[
-          { az: 0, label: "N (0° · Cara Visible)" },
-          { az: 90, label: "E (90°)" },
-          { az: 180, label: "S (180° · Polo)" },
-          { az: 270, label: "W (270°)" },
-          { az: 360, label: "N (360°)" },
+          { az: 0, label: t.dome.cardinalN0 },
+          { az: 90, label: t.dome.cardinalE90 },
+          { az: 180, label: t.dome.cardinalS180 },
+          { az: 270, label: t.dome.cardinalW270 },
+          { az: 360, label: t.dome.cardinalN360 },
         ].map((card) => {
           const x = azToX(card.az === 360 ? 359.99 : card.az);
           return (
-            <g key={card.label}>
+            <g key={card.az}>
               <line
                 x1={x}
                 y1={padTop}
@@ -147,7 +228,7 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
               />
               <text
                 x={x}
-                y={height - 10}
+                y={padTop + plotH + 14}
                 textAnchor="middle"
                 fill="#CBD5E1"
                 fontSize="10"
@@ -159,7 +240,7 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
           );
         })}
 
-        {/* Disco Solar (antes del terreno para que quede oculto si baja del horizonte) */}
+        {/* Solar Disk (drawn before terrain so it is occluded when below the horizon) */}
         {currentSample && (
           <g>
             <circle
@@ -179,12 +260,12 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
               fontWeight="bold"
               fontFamily="var(--font-mono)"
             >
-              ☀ Sol ({currentSample.sun.elevation_deg.toFixed(2)}°)
+              ☀ {t.dome.sunWord} ({currentSample.sun.elevation_deg.toFixed(2)}°)
             </text>
           </g>
         )}
 
-        {/* Disco Terrestre DTE */}
+        {/* Earth disk (DTE) */}
         {currentSample && (
           <g>
             <circle
@@ -204,12 +285,12 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
               fontWeight="bold"
               fontFamily="var(--font-mono)"
             >
-              🜨 Tierra ({currentSample.earth.elevation_deg.toFixed(2)}°)
+              🜨 {t.dome.earthWord} ({currentSample.earth.elevation_deg.toFixed(2)}°)
             </text>
           </g>
         )}
 
-        {/* Silueta Topografica LOLA 360° */}
+        {/* LOLA 360° Topographic Silhouette */}
         <polygon points={polygonPoints} fill="url(#terrainFillGrad)" />
         <polyline
           points={polylinePoints}
@@ -218,7 +299,7 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
           strokeWidth="1.8"
         />
 
-        {/* Linea de referencia 0 deg encima para referencia de ingeniero */}
+        {/* 0 deg reference line above for engineer reference */}
         <line
           x1={padLeft}
           y1={zeroY}
@@ -230,13 +311,13 @@ export function HorizonDome({ profile, currentSample, mode }: HorizonDomeProps) 
       </svg>
 
       <div className="viewport-overlay-bottom">
-        <span className="hud-pill mono-telemetry">
-          Cota DEM: {profile.site_elevation_m.toFixed(0)} m · Mástil: +{profile.site.observer_height_m.toFixed(1)} m
+        <span className="hud-pill" style={{ gap: "10px", flexWrap: "wrap" }}>
+          <span style={{ color: "#FBBF24", fontWeight: 700 }}>● ☀ {t.dome.sunWord}</span>
+          <span style={{ color: "#38BDF8", fontWeight: 700 }}>● 🜨 {t.dome.earthWord}</span>
+          <span style={{ color: "#93C5FD", fontWeight: 700 }}>━ {t.dome.horizonLineLegend}</span>
         </span>
         <span className="hud-pill">
-          {mode === "edu"
-            ? "Si el Sol o la Tierra bajan de la silueta gris, las montañas los tapan"
-            : `Escala vertical ×${verticalExaggeration} · Sin refracción atmosférica (R = 1737.4 km)`}
+          {t.dome.windowStartLegend}
         </span>
       </div>
     </div>

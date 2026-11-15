@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Descarga y ensambla texturas 100% fotograficas reales de la NASA (Moon Trek WMTS 8K/4K + SVS LROC/LOLA).
+"""Downloads and assembles 100% real NASA photographic textures (Moon Trek WMTS 8K/4K + SVS LROC/LOLA).
 
-Propietario: astro-terrain-specialist / fullstack-visualizer.
-PROHIBIDO usar generadores procedimentales o ruido sintetico sobre el albedo lunar.
-Fuentes 100% reales verificadas de la NASA:
+Owner: astro-terrain-specialist / fullstack-visualizer.
+FORBIDDEN to use procedural generators or synthetic noise over the lunar albedo.
+Verified 100% real NASA sources:
   1. NASA Moon Trek WMTS (https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/default/default028mm/{z}/{y}/{x}.jpg)
-     - Nivel z=3 (16x8 teselas = 4096x2048 px) o z=4 (32x16 teselas = 8192x4096 px) de fotografia satelital real LROC WAC.
+     - Level z=3 (16x8 tiles = 4096x2048 px) or z=4 (32x16 tiles = 8192x4096 px) of real LROC WAC satellite photography.
   2. NASA Scientific Visualization Studio (SVS #4720 CGI Moon Kit):
-     - lroc_color_poles_4k.tif (4096x2048 px fotografia real LROC WAC con cobertura de los polos 85°-90°).
-     - ldem_16_uint.tif (5760x2880 px altimetria laser LOLA real de 16 bits sin compresion).
-  3. GeoTIFF LOLA Polar Sur local (data/lola_dem/raw/ldem_south_pole_calibrated.tif) integrado directamente
-     en las latitudes <-78° del mapa global de elevacion y normales (sin mallas separadas).
+     - lroc_color_poles_4k.tif (4096x2048 px real LROC WAC photography with 85°-90° polar coverage).
+     - ldem_16_uint.tif (5760x2880 px real uncompressed 16-bit LOLA laser altimetry).
+  3. Local South Polar LOLA GeoTIFF (data/lola_dem/raw/ldem_south_pole_calibrated.tif) integrated directly
+     into latitudes < -78° of the global elevation and normal map (no separate meshes).
 
-Uso:
+Usage:
     python scripts/fetch_moon_textures.py
 """
 
@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import concurrent.futures
 import hashlib
+import http.client
 import json
 import math
 import ssl
 import sys
+import urllib.error
 import urllib.request
 import warnings
 from datetime import UTC, datetime
@@ -69,7 +71,7 @@ def download_cached(url: str, dest: Path, min_bytes: int = 50_000, timeout: int 
         print(f"   [CACHE] {dest.name} ({dest.stat().st_size / (1024 * 1024):.2f} MB)")
         return True
 
-    print(f"   Descargando {url} -> {dest.name} ...")
+    print(f"   Downloading {url} -> {dest.name} ...")
     req = urllib.request.Request(
         url,
         headers={"User-Agent": "LunarLandingNavigator/1.0 (NASA Space Apps Challenge 2026)"},
@@ -77,27 +79,27 @@ def download_cached(url: str, dest: Path, min_bytes: int = 50_000, timeout: int 
     try:
         with urllib.request.urlopen(req, context=_create_ssl_context(), timeout=timeout) as resp:
             if resp.status != 200:
-                print(f"   [AVISO] HTTP {resp.status} desde {url}", file=sys.stderr)
+                print(f"   [WARN] HTTP {resp.status} from {url}", file=sys.stderr)
                 return False
             data = resp.read()
             if len(data) < min_bytes:
-                print(f"   [AVISO] Archivo incompleto ({len(data)} B < {min_bytes} B)", file=sys.stderr)
+                print(f"   [WARN] Incomplete file ({len(data)} B < {min_bytes} B)", file=sys.stderr)
                 return False
             dest.write_bytes(data)
-            print(f"   [OK] Descargado {dest.name} ({len(data) / (1024 * 1024):.2f} MB)")
+            print(f"   [OK] Downloaded {dest.name} ({len(data) / (1024 * 1024):.2f} MB)")
             return True
-    except Exception as exc:
-        print(f"   [AVISO] Fallo al descargar {url}: {exc}", file=sys.stderr)
+    except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
+        print(f"   [WARN] Failed to download {url}: {exc}", file=sys.stderr)
         return False
 
 
 def fetch_nasa_trek_eq_mosaic(z: int = 3) -> np.ndarray | None:
-    """Descarga y ensambla el mosaico fotografico real LRO_WAC_Mosaic_Global_303ppd_v02 de NASA Moon Trek.
+    """Downloads and assembles the real NASA Moon Trek LRO_WAC_Mosaic_Global_303ppd_v02 photo mosaic.
 
-    En WMTS equirectangular global (2:1):
-      - z = 3: 16 columnas (x=0..15) x 8 filas (y=0..7) de 256x256 px = 4096 x 2048 px reales.
-      - z = 4: 32 columnas (x=0..31) x 16 filas (y=0..15) de 256x256 px = 8192 x 4096 px reales.
-    Verifica que cada tesela descargada tenga cabecera JPEG real (0xFFD8).
+    In global equirectangular WMTS (2:1):
+      - z = 3: 16 columns (x=0..15) x 8 rows (y=0..7) of 256x256 px = 4096 x 2048 real pixels.
+      - z = 4: 32 columns (x=0..31) x 16 rows (y=0..15) of 256x256 px = 8192 x 4096 real pixels.
+    Verifies that every downloaded tile has a valid JPEG header (0xFFD8).
     """
     n_cols = 2 ** (z + 1)
     n_rows = 2**z
@@ -122,20 +124,20 @@ def fetch_nasa_trek_eq_mosaic(z: int = 3) -> np.ndarray | None:
             with urllib.request.urlopen(req, context=_create_ssl_context(), timeout=15) as r:
                 if r.status == 200:
                     raw = r.read()
-                    # Verificar firma binaria JPEG (SOI 0xFFD8)
+                    # Verify binary JPEG signature (SOI 0xFFD8)
                     if len(raw) > 400 and raw[:2] == b"\xff\xd8":
                         d.write_bytes(raw)
                         return True
-        except Exception:
-            pass
+        except (urllib.error.URLError, http.client.HTTPException, OSError):
+            return False
         return False
 
-    print(f"   Descargando teselas WMTS reales de NASA Moon Trek (z={z}, {n_cols}x{n_rows} = {len(tasks)} teselas)...")
+    print(f"   Downloading real NASA Moon Trek WMTS tiles (z={z}, {n_cols}x{n_rows} = {len(tasks)} tiles)...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
         results = list(pool.map(_download_tile, tasks))
 
     ok_count = sum(1 for r in results if r)
-    print(f"   Teselas JPEG verificadas de NASA Moon Trek (z={z}): {ok_count}/{len(tasks)}")
+    print(f"   Verified NASA Moon Trek JPEG tiles (z={z}): {ok_count}/{len(tasks)}")
     if ok_count < int(len(tasks) * 0.85):
         return None
 
@@ -153,7 +155,7 @@ def fetch_nasa_trek_eq_mosaic(z: int = 3) -> np.ndarray | None:
 
 
 def write_jpeg_rgb(path: Path, rgb: np.ndarray, quality: int = 96) -> None:
-    """Guarda un array (H, W, 3) o (H, W) uint8 como JPEG de maxima calidad."""
+    """Saves a (H, W, 3) or (H, W) uint8 array as a highest-quality JPEG."""
     path.parent.mkdir(parents=True, exist_ok=True)
     arr = np.clip(rgb, 0, 255).astype(np.uint8)
     if arr.ndim == 2:
@@ -188,7 +190,7 @@ def write_jpeg_rgb(path: Path, rgb: np.ndarray, quality: int = 96) -> None:
 
 
 def scharr_normal_map_uint8(height_field: np.ndarray, strength: float = 12.0) -> np.ndarray:
-    """Calcula un mapa de normales en espacio tangente (H, W, 3) uint8 puro sin ruido sintetico."""
+    """Computes a pure tangent-space normal map (H, W, 3) uint8 without synthetic noise."""
     kx = np.array([[-3.0, 0.0, 3.0], [-10.0, 0.0, 10.0], [-3.0, 0.0, 3.0]], dtype=np.float32) / 32.0
     ky = np.array([[-3.0, -10.0, -3.0], [0.0, 0.0, 0.0], [3.0, 10.0, 3.0]], dtype=np.float32) / 32.0
     gx = convolve(height_field.astype(np.float32), kx, mode="wrap")
@@ -210,28 +212,28 @@ def scharr_normal_map_uint8(height_field: np.ndarray, strength: float = 12.0) ->
 
 
 def build_pure_photographic_moon_textures() -> None:
-    """Ensambla el mosaico 100% fotografico real de la NASA (8192x4096 o 4096x2048) y el DEM LOLA de 16 bits."""
-    print("\n[1/2] Obteniendo fotografia real NASA LROC WAC (SVS #4720 + NASA Moon Trek WMTS)...")
+    """Assembles the 100% real NASA photographic mosaic (8192x4096 or 4096x2048) and the 16-bit LOLA DEM."""
+    print("\n[1/2] Fetching real NASA LROC WAC photography (SVS #4720 + NASA Moon Trek WMTS)...")
 
-    # Descargar el TIFF maestro fotografico 4K de NASA SVS #4720 (con cobertura polar completa)
+    # Download the 4K photographic master TIFF from NASA SVS #4720 (with full polar coverage)
     svs_albedo_path = CACHE_DIR / "lroc_color_poles_4k.tif"
     download_cached(RAW_SOURCES["lroc_4k_tif"], svs_albedo_path, min_bytes=4_000_000)
 
-    # Intentar ensamblar z=4 (8192x4096) o z=3 (4096x2048) desde NASA Moon Trek WMTS
+    # Attempt to assemble z=4 (8192x4096) or z=3 (4096x2048) from NASA Moon Trek WMTS
     trek_mosaic = fetch_nasa_trek_eq_mosaic(z=4)
     if trek_mosaic is not None:
         out_h, out_w = 4096, 8192
-        print("   [OK] Mosaico WMTS 8K (8192x4096 px) de NASA Moon Trek ensamblado.")
+        print("   [OK] Assembled 8K WMTS mosaic (8192x4096 px) from NASA Moon Trek.")
     else:
         trek_mosaic = fetch_nasa_trek_eq_mosaic(z=3)
         if trek_mosaic is not None:
             out_h, out_w = 2048, 4096
-            print("   [OK] Mosaico WMTS 4K (4096x2048 px) de NASA Moon Trek ensamblado.")
+            print("   [OK] Assembled 4K WMTS mosaic (4096x2048 px) from NASA Moon Trek.")
         else:
             out_h, out_w = 4096, 8192
-            print("   [INFO] Usando el TIFF maestro oficial lroc_color_poles_4k.tif de NASA SVS a resolucion 8192x4096.")
+            print("   [INFO] Using official master TIFF lroc_color_poles_4k.tif from NASA SVS at 8192x4096 resolution.")
 
-    # Leer el TIFF maestro de NASA SVS (lroc_color_poles_4k.tif) que tiene color calibrado y polos completos
+    # Read NASA SVS master TIFF (lroc_color_poles_4k.tif) with calibrated color and complete polar coverage
     if svs_albedo_path.is_file():
         with rasterio.open(svs_albedo_path) as src:
             svs_rgb = np.transpose(
@@ -248,31 +250,31 @@ def build_pure_photographic_moon_textures() -> None:
             ).astype(np.float32)
 
     if trek_mosaic is not None:
-        # El mosaico LRO_WAC_Mosaic_Global_303ppd_v02 de Moon Trek tiene huecos negros en |lat| > 85°;
-        # rellenar suavemente los polos (>82°) con lroc_color_poles_4k.tif de NASA SVS y preservar el detalle
-        # fotografico 100% puro de Moon Trek + el color real de SVS sin inventar ni un solo pixel.
+        # The Moon Trek LRO_WAC_Mosaic_Global_303ppd_v02 mosaic has black gaps above |lat| > 85°;
+        # smoothly fill the poles (>82°) using lroc_color_poles_4k.tif from NASA SVS and preserve
+        # 100% pure Moon Trek photographic detail + real SVS color without inventing a single pixel.
         trek_f = trek_mosaic.astype(np.float32)
         lats = np.linspace(90.0, -90.0, out_h, dtype=np.float32)[:, None]
         polar_weight = np.clip((np.abs(lats) - 80.0) / 6.0, 0.0, 1.0)[:, :, None]
-        # Donde Moon Trek tenga pixeles vacios (negros < 5), usar SVS
+        # Wherever Moon Trek has empty pixels (black < 6), use SVS
         empty_mask = (np.max(trek_f, axis=-1, keepdims=True) < 6.0).astype(np.float32)
         blend_w = np.maximum(polar_weight, empty_mask)
-        # Combinar la luminancia de alta definicion de Moon Trek con la crominancia natural de SVS
+        # Combine Moon Trek's high-definition luminance with SVS natural chrominance
         svs_luma = (0.299 * svs_rgb[:, :, 0] + 0.587 * svs_rgb[:, :, 1] + 0.114 * svs_rgb[:, :, 2])[:, :, None] + 1e-4
         trek_luma = (0.299 * trek_f[:, :, 0] + 0.587 * trek_f[:, :, 1] + 0.114 * trek_f[:, :, 2])[:, :, None]
-        # Transferir el detalle nitido de las teselas WMTS manteniendo el albedo real calibrado de SVS
+        # Transfer crisp detail from WMTS tiles while keeping real calibrated SVS albedo
         trek_colored = np.clip(svs_rgb * (0.45 + 0.55 * (trek_luma / svs_luma)), 0.0, 255.0)
         final_albedo = np.clip((1.0 - blend_w) * trek_colored + blend_w * svs_rgb, 0.0, 255.0).astype(np.uint8)
     else:
-        # Fotografia pura 100% de NASA SVS lroc_color_poles_4k.tif sin ninguna alteracion sintetica
+        # 100% pure NASA SVS lroc_color_poles_4k.tif photograph with no synthetic alterations
         final_albedo = np.clip(svs_rgb, 0.0, 255.0).astype(np.uint8)
 
     write_jpeg_rgb(TEXTURES_DIR / "moon_albedo_map.jpg", final_albedo, quality=96)
-    print(f"   [OK] moon_albedo_map.jpg guardado ({out_w}x{out_h} px, 100% fotografia real NASA LROC WAC).")
+    print(f"   [OK] Saved moon_albedo_map.jpg ({out_w}x{out_h} px, 100% real NASA LROC WAC photography).")
 
-    # [2/2] Mapa de elevacion (Bump) y Normales a partir de LOLA 16-bit (ldem_16_uint.tif 5760x2880)
-    # integrando en latitudes <-78° el GeoTIFF LOLA Polar Sur local
-    print("\n[2/2] Construyendo mapas de elevacion y normales reales desde LOLA 16-bit (ldem_16_uint.tif)...")
+    # [2/2] Elevation (Bump) and Normal Map from 16-bit LOLA (ldem_16_uint.tif 5760x2880)
+    # integrating the local South Polar LOLA GeoTIFF below lat < -78°
+    print("\n[2/2] Building real elevation and normal maps from 16-bit LOLA (ldem_16_uint.tif)...")
     dem_16_path = CACHE_DIR / "ldem_16_uint.tif"
     if not download_cached(RAW_SOURCES["ldem_16_tif"], dem_16_path, min_bytes=5_000_000):
         dem_16_path = CACHE_DIR / "ldem_4_uint.tif"
@@ -280,7 +282,7 @@ def build_pure_photographic_moon_textures() -> None:
             dem_16_path = CACHE_DIR / "ldem_3_8bit.jpg"
             download_cached(RAW_SOURCES["ldem_3_jpg"], dem_16_path, min_bytes=50_000)
 
-    # Usar resolucion 4096x2048 o 8192x4096 coincidente con el mapa de albedo (hasta 4096x2048 para carga rapida en GPU)
+    # Use 4096x2048 resolution matching the albedo map (capped at 4096x2048 for fast GPU upload)
     dem_h, dem_w = 2048, 4096
     with rasterio.open(dem_16_path) as src:
         dem_raw = src.read(
@@ -292,7 +294,7 @@ def build_pure_photographic_moon_textures() -> None:
     p_low, p_high = np.percentile(dem_raw, [0.1, 99.9])
     dem_norm = np.clip((dem_raw - p_low) / max(1e-5, float(p_high - p_low)), 0.0, 1.0)
 
-    # Integrar el GeoTIFF LOLA Polar Sur local directamente en las filas correspondientes a lat < -78°
+    # Blend local South Polar LOLA GeoTIFF directly into rows corresponding to lat < -78°
     if POLAR_DEM_PATH.is_file():
         with rasterio.open(POLAR_DEM_PATH) as psrc:
             polar_grid = psrc.read(1).astype(np.float32)
@@ -303,7 +305,7 @@ def build_pure_photographic_moon_textures() -> None:
             pdy = float(p_transform.e)
             ph, pw = polar_grid.shape
 
-        # Filas del mapa equirrectangular donde lat_deg esta en [-90°, -78°]
+        # Equirectangular map rows where lat_deg is in [-90°, -78°]
         row_start = int(((90.0 - (-78.0)) / 180.0) * dem_h)
         lats_polar = np.linspace(-78.0, -89.95, dem_h - row_start, dtype=np.float32)[:, None]
         lons_polar = np.linspace(-180.0, 180.0, dem_w, dtype=np.float32)[None, :]
@@ -319,7 +321,7 @@ def build_pure_photographic_moon_textures() -> None:
         local_polar_sample_m = polar_grid[row_idx, col_idx]
         local_polar_norm = np.clip((local_polar_sample_m + 6000.0) / 13_000.0, 0.0, 1.0)
 
-        # Transicion suave entre -78° y -82° para que no exista ninguna costura en la esfera unica
+        # Smooth transition between -78° and -82° so there is zero seam on the unified sphere
         w_polar = np.clip(((-lats_polar) - 78.5) / 3.5, 0.0, 1.0)
         dem_norm[row_start:, :] = (
             (1.0 - w_polar) * dem_norm[row_start:, :]
@@ -329,7 +331,7 @@ def build_pure_photographic_moon_textures() -> None:
     write_jpeg_rgb(TEXTURES_DIR / "moon_bump_lola.jpg", (dem_norm * 255.0).astype(np.uint8), quality=96)
     normal_rgb = scharr_normal_map_uint8(dem_norm, strength=14.0)
     write_jpeg_rgb(TEXTURES_DIR / "moon_normal_lola.jpg", normal_rgb, quality=95)
-    print(f"   [OK] moon_bump_lola.jpg y moon_normal_lola.jpg guardados ({dem_w}x{dem_h} px).")
+    print(f"   [OK] Saved moon_bump_lola.jpg and moon_normal_lola.jpg ({dem_w}x{dem_h} px).")
 
 
 def verify_and_write_manifest() -> bool:
@@ -342,13 +344,13 @@ def verify_and_write_manifest() -> bool:
     all_ok = True
 
     print("\n" + "=" * 88)
-    print(" RESUMEN DE TEXTURAS FOTOGRAFICAS REALES NASA VERIFICADAS")
+    print(" VERIFIED REAL NASA PHOTOGRAPHIC TEXTURES SUMMARY")
     print("=" * 88)
     for fname, desc, min_size in expected:
         p = TEXTURES_DIR / fname
         if not p.is_file() or p.stat().st_size < min_size:
             size = p.stat().st_size if p.is_file() else 0
-            print(f"  [FAIL] {fname}: {size:,} bytes (minimo requerido: {min_size:,} bytes)", file=sys.stderr)
+            print(f"  [FAIL] {fname}: {size:,} bytes (minimum required: {min_size:,} bytes)", file=sys.stderr)
             all_ok = False
             continue
         with rasterio.open(p) as ds:
@@ -356,7 +358,7 @@ def verify_and_write_manifest() -> bool:
         raw_bytes = p.read_bytes()
         mb = len(raw_bytes) / (1024 * 1024)
         sha256 = hashlib.sha256(raw_bytes).hexdigest()
-        print(f"  [PASS] {fname:<24s} | Dimensiones: {w}x{h} px | Tamano: {mb:.2f} MB ({len(raw_bytes):,} B)")
+        print(f"  [PASS] {fname:<24s} | Dimensions: {w}x{h} px | Size: {mb:.2f} MB ({len(raw_bytes):,} B)")
         entries.append(
             {
                 "filename": fname,
@@ -389,7 +391,7 @@ def main() -> int:
     TEXTURES_DIR.mkdir(parents=True, exist_ok=True)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     print("=" * 88)
-    print(" LUNAR LANDING SITE NAVIGATOR — DESCARGA Y ENSAMBLAJE 100% FOTOGRAFICO NASA LROC + LOLA")
+    print(" LUNAR LANDING SITE NAVIGATOR — 100% PHOTOGRAPHIC NASA LROC + LOLA DOWNLOAD & ASSEMBLY")
     print("=" * 88)
     build_pure_photographic_moon_textures()
     ok = verify_and_write_manifest()
